@@ -1,13 +1,8 @@
 #include <stdbool.h>
 #include <string.h>
 
-/// Flags das opções da linha de comando
-typedef struct {
-  const char *input_file;
-  bool tokens;
-  bool symtab;
-  bool trace;
-} CliOptions;
+static CliOptions g_opts; // Argumentos e flags da linha de comando
+static bool g_opts_ready = false;
 
 // Tipos de erro retornado pelo arquivo
 typedef enum {
@@ -20,6 +15,8 @@ typedef enum {
 
 /// Retorna 0 se o parsing foi correto
 ArgErr opts_parse(int argc, char *argv[], CliOptions *out) {
+  CliOptions tmp{0};
+
   // Argumentos não nulos
   if (out == NULL || argv == NULL)
     return E_OUT_NULL;
@@ -53,5 +50,11 @@ ArgErr opts_parse(int argc, char *argv[], CliOptions *out) {
       return E_FLAG;
     }
   }
+
+  g_opts = tmp;
+  g_opts_ready = true;
   return E_OK;
 }
+
+// Verifica se a flag requisitada foi chamada pelo usuário
+const CliOptions *opts_get(void) { return g_opts_ready ? &g_opts : NULL; }
