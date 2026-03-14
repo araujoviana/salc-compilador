@@ -1,24 +1,16 @@
-#include <stdbool.h>
+#include "opt.h"
+
 #include <string.h>
 
 static CliOptions g_opts; // Argumentos e flags da linha de comando
 static bool g_opts_ready = false;
 
-// Tipos de erro retornado pelo arquivo
-typedef enum {
-  E_OK = 0,
-  E_COUNT,
-  E_PATH,
-  E_FLAG,
-  E_OUT_NULL,
-} ArgErr;
-
 /// Retorna 0 se o parsing foi correto
-ArgErr opts_parse(int argc, char *argv[], CliOptions *out) {
-  CliOptions tmp{0};
+ArgErr opts_parse(int argc, char *argv[]) {
+  CliOptions tmp = {0};
 
   // Argumentos não nulos
-  if (out == NULL || argv == NULL)
+  if (argv == NULL)
     return E_OUT_NULL;
 
   // Número de argumentos correto
@@ -32,20 +24,15 @@ ArgErr opts_parse(int argc, char *argv[], CliOptions *out) {
   }
 
   // Preenche flags no struct
-  *out = (CliOptions){
-      .input_file = argv[1],
-      .tokens = false,
-      .symtab = false,
-      .trace = false,
-  };
+  tmp.input_file = argv[1];
 
   for (int i = 2; i < argc; i++) {
     if (strcmp(argv[i], "--tokens") == 0) {
-      out->tokens = true;
+      tmp.tokens = true;
     } else if (strcmp(argv[i], "--symtab") == 0) {
-      out->symtab = true;
+      tmp.symtab = true;
     } else if (strcmp(argv[i], "--trace") == 0) {
-      out->trace = true;
+      tmp.trace = true;
     } else {
       return E_FLAG;
     }
