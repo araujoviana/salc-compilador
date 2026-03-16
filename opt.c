@@ -2,12 +2,16 @@
 
 #include <string.h>
 
-static CliOptions g_opts; // Argumentos e flags da linha de comando
-static bool g_opts_ready = false;
+static CliOptions
+    g_opts; // Argumentos e flags da linha de comando (symtab, trace e tokens)
+static bool g_opts_ready =
+    false; // Sinaliza se as opções da linha de comando estão prontas e válidas
 
 /// Retorna 0 se o parsing foi correto
 ArgErr opts_parse(int argc, char *argv[]) {
   CliOptions tmp = {0};
+
+  // Cláusulas de guarda
 
   // Argumentos não nulos
   if (argv == NULL)
@@ -26,6 +30,7 @@ ArgErr opts_parse(int argc, char *argv[]) {
   // Preenche flags no struct
   tmp.input_file = argv[1];
 
+  // Verifica quais flags foram invocadas, pulando arquivo sal
   for (int i = 2; i < argc; i++) {
     if (strcmp(argv[i], "--tokens") == 0) {
       tmp.tokens = true;
@@ -44,4 +49,19 @@ ArgErr opts_parse(int argc, char *argv[]) {
 }
 
 // Verifica se a flag requisitada foi chamada pelo usuário
-const CliOptions *opts_get(void) { return g_opts_ready ? &g_opts : NULL; }
+bool opts_get(OptFlag flag) {
+  // Flags não disponíveis
+  if (!g_opts_ready)
+    return false;
+
+  switch (flag) {
+  case OPT_TOKENS:
+    return g_opts.tokens;
+  case OPT_SYMTAB:
+    return g_opts.symtab;
+  case OPT_TRACE:
+    return g_opts.trace;
+  default:
+    return false;
+  }
+}
