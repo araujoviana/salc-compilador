@@ -11,6 +11,9 @@ typedef struct {
   bool trace;
 } CliOptions;
 
+// Criado pra faciliar a interface de opts_get
+typedef enum { OPT_TOKENS, OPT_SYMTAB, OPT_TRACE } OptFlag;
+
 // Tipos de erro retornado pelo arquivo
 typedef enum {
   E_OK = 0,
@@ -21,6 +24,6 @@ typedef enum {
 } ArgErr;
 
 ArgErr opts_parse(int argc, char *argv[]);
-const CliOptions *opts_get(void);
+bool opts_get(OptFlag flag);
 
 #endif
