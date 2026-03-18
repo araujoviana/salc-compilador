@@ -132,24 +132,54 @@ Token lex_next(FILE *file_ptr, int *line_cnt) {
       return make_token(sDIV, "/", *line_cnt, col);
     case '^':
       return make_token(sAND, "^", *line_cnt, col);
+    case '~':
+      return make_token(sNEG, "~", *line_cnt, col);
     }
 
     // Operadores ambíguos de 1 ou mais chars
     switch (c) {
     case '=':
       c = fgetc(file_ptr);
-      switch (c) {
-      // Igual
-      case ' ':
-      case '\t':
-      case '\n':
-      case '\r':
-        return sIGUAL;
-      // Implic (?)
-      case '>':
-        return sIMPLIC;
-      default:
-        diag_error("> ou separador", c, line_cnt);
+      if (c == '>') {
+        return make_token(sIMPLIC, "=>", *line_cnt, col);
+      } else {
+        return make_token(sIGUAL, "=", *line_cnt, col);
+      }
+    case '>':
+      c = fgetc(file_ptr);
+      if (c == '=') {
+        return make_token(sMAIORIG, ">=", *line_cnt, col);
+      } else {
+        return make_token(sMAIOR, ">", *line_cnt, col);
+      }
+    case '<':
+      c = fgetc(file_ptr);
+      if (c == '=') {
+        return make_token(sMENORIG, "<=", *line_cnt, col);
+      } else if (c == '>') {
+        return make_token(sDIFERENTE, "<>", *line_cnt, col);
+      } else {
+        return make_token(sMENOR, "<", *line_cnt, col);
+      }
+    }
+
+    // Operadores com 2 chars
+    switch (c) {
+    case ':':
+      c = fgetc(file_ptr);
+      if (c == '=') {
+        return make_token(sATRIB, ":=", *line_cnt, col);
+      } else {
+        diag_error("=", c, line_cnt); // FIXME segundo argumento
+        return NULL;
+      }
+    case '.':
+      c = fgetc(file_ptr);
+      if (c == '.') {
+        return make_token(sPTOPTO, "..", *line_cnt, col);
+      } else {
+        diag_error(".", c, line_cnt); // FIXME segundo argumento
+        return NULL;
       }
     }
 
