@@ -22,10 +22,9 @@ KeywordMap keyword_map[] = {
     {"loop", sLOOP},       {"match", sMATCH},
     {"module", sMODULE},   {"otherwise", sOTHERWISE},
     {"print", sPRINT},     {"proc", sPROC},
-    {"ret", sRETURN}, // No manual é 'ret'
-    {"scan", sSCAN},       {"start", sSTART},
-    {"step", sSTEP},       {"to", sTO},
-    {"true", sBOOL}, // Tratado como valor booleano
+    {"ret", sRET},         {"scan", sSCAN},
+    {"start", sSTART},     {"step", sSTEP},
+    {"to", sTO},           {"true", sBOOL}, // Tratado como valor booleano
     {"until", sUNTIL},     {"while", sWHILE},
     {"main", sMAIN} // Procedimento principal
 };
