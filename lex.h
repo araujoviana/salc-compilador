@@ -58,7 +58,10 @@ typedef enum {
   sABRE_PARENT,
   sFECHA_PARENT,
   sABRE_COLCH,
-  sFECHA_COLCH
+  sFECHA_COLCH,
+  sTRUE, 
+  sFALSE,
+  sEOF // Adicionado para idenficar final do arquivo
 } Category;
 
 typedef struct {
