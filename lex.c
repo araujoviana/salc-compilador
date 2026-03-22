@@ -15,16 +15,16 @@ typedef struct {
 KeywordMap keyword_map[] = {
     {"bool", sBOOL},       {"char", sCHAR},
     {"do", sDO},           {"else", sELSE},
-    {"end", sEND},         {"false", sFALSE}, // Tratado como valor booleano
+    {"end", sEND},         {"false", sBOOL}, // Tratado como valor booleano
     {"fn", sFN},           {"for", sFOR},
     {"globals", sGLOBALS}, {"if", sIF},
     {"int", sINT},         {"locals", sLOCALS},
     {"loop", sLOOP},       {"match", sMATCH},
     {"module", sMODULE},   {"otherwise", sOTHERWISE},
     {"print", sPRINT},     {"proc", sPROC},
-    {"ret", sRET},         {"scan", sSCAN},
+    {"ret", sRETURN},      {"scan", sSCAN},
     {"start", sSTART},     {"step", sSTEP},
-    {"to", sTO},           {"true", sTRUE}, // Tratado como valor booleano
+    {"to", sTO},           {"true", sBOOL}, // Tratado como valor booleano
     {"until", sUNTIL},     {"while", sWHILE},
     {"main", sMAIN} // Procedimento principal
 };

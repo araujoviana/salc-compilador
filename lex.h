@@ -21,7 +21,7 @@ typedef enum {
   sFN,
   sPROC,
   sMAIN,
-  sRET,
+  sRETURN,
   sPRINT,
   sSCAN,
   sIF,
@@ -59,8 +59,6 @@ typedef enum {
   sFECHA_PARENT,
   sABRE_COLCH,
   sFECHA_COLCH,
-  sTRUE, 
-  sFALSE,
   sEOF // Adicionado para idenficar final do arquivo
 } Category;
 
