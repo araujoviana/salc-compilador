@@ -15,7 +15,7 @@ typedef struct {
 KeywordMap keyword_map[] = {
     {"bool", sBOOL},       {"char", sCHAR},
     {"do", sDO},           {"else", sELSE},
-    {"end", sEND},         {"false", sBOOL}, // Tratado como valor booleano
+    {"end", sEND},         {"false", sFALSE}, // Tratado como valor booleano
     {"fn", sFN},           {"for", sFOR},
     {"globals", sGLOBALS}, {"if", sIF},
     {"int", sINT},         {"locals", sLOCALS},
@@ -24,7 +24,7 @@ KeywordMap keyword_map[] = {
     {"print", sPRINT},     {"proc", sPROC},
     {"ret", sRET},         {"scan", sSCAN},
     {"start", sSTART},     {"step", sSTEP},
-    {"to", sTO},           {"true", sBOOL}, // Tratado como valor booleano
+    {"to", sTO},           {"true", sTRUE}, // Tratado como valor booleano
     {"until", sUNTIL},     {"while", sWHILE},
     {"main", sMAIN} // Procedimento principal
 };
@@ -116,7 +116,7 @@ Token lex_next(FILE *file_ptr, int *line_cnt) {
         break;
       }
       // E
-      else if (c == 'A') {
+      else if (c == '^') {
         APPEND_LEXEME(lexeme, l_len, c);
         state = AND;
         break;
@@ -419,5 +419,5 @@ Token lex_next(FILE *file_ptr, int *line_cnt) {
       return make_token(sAND, lexeme, *line_cnt, 0);
     }
   }
-  return make_token(sEND, "EOF", *line_cnt, 0);
+  return make_token(sEOF, "EOF", *line_cnt, 0);
 }
