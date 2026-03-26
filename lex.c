@@ -31,8 +31,8 @@ KeywordMap keyword_map[] = {
 
 #define TOTAL_KEYWORDS (sizeof(keyword_map) / sizeof(KeywordMap))
 
-static Category get_keyword(char *lexeme) {
-  for (int i = 0; i < TOTAL_KEYWORDS; i++) {
+static Category get_keyword(const char *lexeme) {
+  for (size_t i = 0; i < TOTAL_KEYWORDS; i++) {
     if (strcmp(lexeme, keyword_map[i].text) == 0) {
       return keyword_map[i].category;
     }
@@ -71,8 +71,6 @@ static Token make_token(Category cat, const char *lex, int line, int pos) {
 }
 
 Token lex_next(FILE *file_ptr, int *line_cnt) {
-  Token token = {0}; // Token retornada completa
-
   char lexeme[LEX_LENGTH]; // Lexema acumulado
   size_t l_len = 0;        // Tamanho do lexema
 
@@ -304,8 +302,8 @@ Token lex_next(FILE *file_ptr, int *line_cnt) {
         break;
       } else {
         ungetc(c, file_ptr);
-        Category ident_category = get_keyword(lexeme); // Variável ou keyword
         lexeme[l_len] = '\0';
+        Category ident_category = get_keyword(lexeme); // Variável ou keyword
         return make_token(ident_category, lexeme, *line_cnt, 0);
       }
     case AMBIG_COMMENT:

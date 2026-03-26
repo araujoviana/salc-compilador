@@ -10,6 +10,7 @@ static bool g_opts_ready =
 /// Retorna 0 se o parsing foi correto
 ArgErr opts_parse(int argc, char *argv[]) {
   CliOptions tmp = {0};
+  g_opts_ready = false;
 
   // Cláusulas de guarda
 
@@ -64,4 +65,12 @@ bool opts_get(OptFlag flag) {
   default:
     return false;
   }
+}
+
+const char *opts_input_file(void) {
+  if (!g_opts_ready) {
+    return NULL;
+  }
+
+  return g_opts.input_file;
 }

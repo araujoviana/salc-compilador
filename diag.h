@@ -1,8 +1,8 @@
 #ifndef DIAG_H
 #define DIAG_H
 
-int diag_error(char *token_expected, char *token_found, int line);
+int diag_error(const char *token_expected, const char *token_found, int line);
 
-int diag_info(char *msg);
+int diag_info(const char *msg);
 
 #endif
