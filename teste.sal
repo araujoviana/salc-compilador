@@ -1,0 +1,24 @@
+module demo;
+globals
+x, y: int;
+flag: bool;
+
+proc soma(a: int, b: int)
+locals
+r: int;
+start
+r := a + b;
+print(r);
+end
+
+proc main()
+locals
+i: int;
+start
+x := 1;
+y := 2;
+soma(x, y);
+if (x < y) print("ok");
+for i := 0 to 3 step 1 do print(i);
+loop while (i < 5) i := i + 1;
+end

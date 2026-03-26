@@ -25,5 +25,6 @@ typedef enum {
 
 ArgErr opts_parse(int argc, char *argv[]);
 bool opts_get(OptFlag flag);
+const char *opts_input_file(void);
 
 #endif

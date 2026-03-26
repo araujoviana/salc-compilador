@@ -1,9 +1,55 @@
 #include "parser.h"
 #include "diag.h"
 #include "lex.h"
+#include "log.h"
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+
+static Token token;
+static Token next_token;
+static FILE *src;
+static int line_cnt = 1;
+
+static void parse_ini(void);
+static void parse_glob(void);
+static void parse_subs(void);
+static void parse_decls(void);
+static void parse_decl_item(void);
+static void parse_tpo(void);
+static void parse_func(void);
+static void parse_proc(void);
+static void parse_princ(void);
+static void parse_locals_opt(void);
+static void parse_param(void);
+static void parse_bco(void);
+static void parse_cmd(void);
+static void parse_out(void);
+static void parse_inp(void);
+static void parse_if(void);
+static void parse_mat(void);
+static void parse_wlist(void);
+static void parse_when(void);
+static void parse_otherwise(void);
+static void parse_wcnd(void);
+static void parse_witem(void);
+static void parse_wint(void);
+static void parse_fr(void);
+static void parse_loop(void);
+static void parse_ret(void);
+static void parse_atr(void);
+static void parse_call(void);
+static void parse_vec(void);
+static void parse_id(void);
+static void parse_elem(void);
+static void parse_expr(void);
+static void parse_exlog(void);
+static void parse_exrel(void);
+static void parse_exari(void);
+static void parse_exarp(void);
+static void parse_fact(void);
+static void parse_primary(void);
+static void parse_litl(void);
 
 static void advance(void) {
   token = next_token;
@@ -19,7 +65,7 @@ static bool accept(Category c) {
 }
 
 static void fail(const char *expected) {
-  diag_error((char *)expected, token.lexema, token.line);
+  diag_error(expected, token.lexema, token.line);
   exit(EXIT_FAILURE);
 }
 
@@ -59,6 +105,7 @@ static void parse_decl_item(void) {
 }
 
 static void parse_decls(void) {
+  log_trace("parse_decls");
   parse_decl_item();
   while (accept(sVIRGULA)) {
     parse_decl_item();
@@ -86,6 +133,7 @@ static void parse_tpo(void) {
 }
 
 static void parse_glob(void) {
+  log_trace("parse_glob");
   expect(sGLOBALS, "globals");
   parse_decls();
   while (token.category == sIDENTIF) {
@@ -114,6 +162,7 @@ static void parse_param(void) {
 }
 
 static void parse_func(void) {
+  log_trace("parse_func");
   expect(sFN, "fn");
   parse_id();
   expect(sABRE_PARENT, "(");
@@ -128,6 +177,7 @@ static void parse_func(void) {
 }
 
 static void parse_proc(void) {
+  log_trace("parse_proc");
   expect(sPROC, "proc");
   parse_id();
   expect(sABRE_PARENT, "(");
@@ -140,6 +190,7 @@ static void parse_proc(void) {
 }
 
 static void parse_subs(void) {
+  log_trace("parse_subs");
   while (token.category == sFN ||
          (token.category == sPROC && next_token.category != sMAIN)) {
     if (token.category == sFN) {
@@ -151,6 +202,7 @@ static void parse_subs(void) {
 }
 
 static void parse_princ(void) {
+  log_trace("parse_princ");
   expect(sPROC, "proc");
   expect(sMAIN, "main");
   expect(sABRE_PARENT, "(");
@@ -160,6 +212,7 @@ static void parse_princ(void) {
 }
 
 static void parse_ini(void) {
+  log_trace("parse_ini");
   expect(sMODULE, "module");
   parse_id();
   expect(sPTO_VIRG, ";");
@@ -171,6 +224,7 @@ static void parse_ini(void) {
 }
 
 static void parse_bco(void) {
+  log_trace("parse_bco");
   expect(sSTART, "start");
   while (starts_cmd(token.category)) {
     parse_cmd();
@@ -337,6 +391,7 @@ static void parse_ret(void) {
 }
 
 static void parse_cmd(void) {
+  log_trace("parse_cmd");
   switch (token.category) {
   case sPRINT:
     parse_out();
@@ -453,6 +508,7 @@ static void parse_exlog(void) {
 }
 
 static void parse_expr(void) {
+  log_trace("parse_expr");
   parse_exlog();
   while (accept(sOR)) {
     parse_exlog();
@@ -464,6 +520,8 @@ int parser_parse(FILE *source) {
     return -1;
   }
 
+  log_trace("inicio_analise_sintatica");
+
   src = source;
   line_cnt = 1;
   token = lex_next(src, &line_cnt);
@@ -471,6 +529,8 @@ int parser_parse(FILE *source) {
 
   parse_ini();
   expect(sEOF, "fim de arquivo");
+
+  log_trace("fim_analise_sintatica");
 
   return 0;
 }
