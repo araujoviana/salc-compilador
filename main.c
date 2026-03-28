@@ -37,10 +37,6 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (opts_get(OPT_SYMTAB)) {
-    fprintf(stderr, "Aviso: --symtab ainda nao implementada.\n");
-  }
-
   if (parser_parse(source) != 0) {
     fclose(source);
     return EXIT_FAILURE;
