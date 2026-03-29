@@ -25,9 +25,8 @@ KeywordMap keyword_map[] = {
     {"ret", sRETURN},      {"scan", sSCAN},
     {"start", sSTART},     {"step", sSTEP},
     {"to", sTO},           {"true", sBOOL}, // Tratado como valor booleano
-    {"until", sUNTIL},     {"when",  sWHEN},
-    {"while", sWHILE},
-    {"main", sMAIN} // Procedimento principal
+    {"until", sUNTIL},     {"when", sWHEN},
+    {"while", sWHILE},     {"main", sMAIN} // Procedimento principal
 };
 
 #define TOTAL_KEYWORDS (sizeof(keyword_map) / sizeof(KeywordMap))
