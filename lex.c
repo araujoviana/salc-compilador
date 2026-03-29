@@ -92,7 +92,7 @@ Token lex_next(FILE *file_ptr, int *line_cnt) {
       }
       // String
       if (c == '\"') {
-        APPEND_LEXEME(lexeme, l_len, c);
+        APPEND_LEXEME(lexeme, l_len, c); // lexeme[l_len++] = c
         state = STRING;
         break;
       }
@@ -201,6 +201,7 @@ Token lex_next(FILE *file_ptr, int *line_cnt) {
         lexeme[l_len] = '\0';
         return make_token(sPTO_VIRG, lexeme, *line_cnt, 0);
       }
+
       // Vírgula
       else if (c == ',') {
         APPEND_LEXEME(lexeme, l_len, c);
@@ -399,14 +400,19 @@ Token lex_next(FILE *file_ptr, int *line_cnt) {
         return make_token(sMENOR, lexeme, *line_cnt, 0);
       }
     case OR:
+      if (isspace(c)) {
+        ungetc(c, file_ptr);
+        lexeme[l_len] = '\0';
+        return make_token(sOR, lexeme, *line_cnt, 0);
+      }
       if (isalpha(c) || isdigit(c) || c == '_') {
         ungetc(c, file_ptr);
         state = IDENT;
         break;
       }
       ungetc(c, file_ptr);
-      lexeme[l_len] = '\0';
-      return make_token(sOR, lexeme, *line_cnt, 0);
+      state = IDENT;
+      break;
     case AND:
       if (isalpha(c) || isdigit(c) || c == '_') {
         ungetc(c, file_ptr);
@@ -418,5 +424,47 @@ Token lex_next(FILE *file_ptr, int *line_cnt) {
       return make_token(sAND, lexeme, *line_cnt, 0);
     }
   }
+
+  lexeme[l_len] = '\0';
+
+  switch (state) {
+  case NUMBER:
+    return make_token(sCTEINT, lexeme, *line_cnt, 0);
+  case IDENT:
+    return make_token(get_keyword(lexeme), lexeme, *line_cnt, 0);
+  case OR:
+    return make_token(sIDENTIF, lexeme, *line_cnt, 0);
+  case AND:
+    return make_token(sAND, lexeme, *line_cnt, 0);
+  case COLON:
+    return make_token(sDOIS_PTOS, lexeme, *line_cnt, 0);
+  case EQUAL:
+    return make_token(sIGUAL, lexeme, *line_cnt, 0);
+  case GREATER:
+    return make_token(sMAIOR, lexeme, *line_cnt, 0);
+  case LOWER:
+    return make_token(sMENOR, lexeme, *line_cnt, 0);
+  case STRING:
+    diag_error("\"", "EOF", *line_cnt);
+    break;
+  case CHAR_START:
+  case CHAR_ESC:
+  case CHAR_MID:
+    diag_error("'", "EOF", *line_cnt);
+    break;
+  case BLOCK_COMMENT:
+  case BLOCK_COMMENT_ENDING:
+    diag_error("}@", "EOF", *line_cnt);
+    break;
+  case DOT:
+    diag_error("'.'", "EOF", *line_cnt);
+    break;
+  case AMBIG_COMMENT:
+  case LINE_COMMENT:
+  case START:
+  default:
+    break;
+  }
+
   return make_token(sEOF, "EOF", *line_cnt, 0);
 }
