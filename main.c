@@ -1,6 +1,7 @@
 #include "log.h"
 #include "opt.h"
 #include "parser.h"
+#include "symtab.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,21 +28,36 @@ int main(int argc, char *argv[]) {
   if (opts_get(OPT_TOKENS)) {
     if (log_tokens(source) != 0) {
       fclose(source);
+      log_shutdown();
       return EXIT_FAILURE;
     }
 
     if (fseek(source, 0, SEEK_SET) != 0) {
       fprintf(stderr, "Erro: nao foi possivel reposicionar o arquivo.\n");
       fclose(source);
+      log_shutdown();
       return EXIT_FAILURE;
     }
   }
 
+  ts_iniciar();
+
   if (parser_parse(source) != 0) {
+    ts_destruir();
     fclose(source);
+    log_shutdown();
     return EXIT_FAILURE;
   }
 
+  if (opts_get(OPT_SYMTAB) && log_symtab() != 0) {
+    ts_destruir();
+    fclose(source);
+    log_shutdown();
+    return EXIT_FAILURE;
+  }
+
+  ts_destruir();
   fclose(source);
+  log_shutdown();
   return EXIT_SUCCESS;
 }

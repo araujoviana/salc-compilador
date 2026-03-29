@@ -1,8 +1,8 @@
 #include "parser.h"
 #include "diag.h"
 #include "lex.h"
-#include "log.h"
 #include "symtab.h"
+
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,6 +19,8 @@ typedef struct {
 typedef struct {
     char nome[LEX_LENGTH];
     Tipo tipo;
+    int extra;
+    int linha;
 } InfoParam;
 
 
@@ -69,6 +71,20 @@ static void parse_exarp(void);
 static void parse_fact(void);
 static void parse_litl(void);
 
+static void copy_text(char *dest, size_t dest_size, const char *src);
+static void copy_ident_atual(char *dest, size_t dest_size, int *line_out);
+static void build_scope_desc(char *dest, size_t dest_size, const char *kind,
+                             const char *name);
+static void fail_semantic(const char *expected, const char *found, int line);
+static bool simbolo_escalar(const Simbolo *sim);
+static bool simbolo_vetor(const Simbolo *sim);
+static bool simbolo_subrotina(const Simbolo *sim);
+static Simbolo *buscar_ou_falhar(const char *nome, int line,
+                                 const char *expected);
+static Simbolo *buscar_id_escalar_atual(const char *expected);
+static Simbolo *buscar_id_vetor_atual(const char *expected);
+static Simbolo *buscar_id_subrotina_atual(void);
+
 static void advance(void) {
   token = next_token;
   next_token = lex_next(src, &line_cnt);
@@ -112,6 +128,122 @@ static bool is_bool_literal_token(void) {
                                      strcmp(token.lexema, "false") == 0);
 }
 
+static void copy_text(char *dest, size_t dest_size, const char *src) {
+  if (dest == NULL || dest_size == 0) {
+    return;
+  }
+
+  if (src == NULL) {
+    dest[0] = '\0';
+    return;
+  }
+
+  strncpy(dest, src, dest_size - 1);
+  dest[dest_size - 1] = '\0';
+}
+
+static void copy_ident_atual(char *dest, size_t dest_size, int *line_out) {
+  copy_text(dest, dest_size, token.lexema);
+  if (line_out != NULL) {
+    *line_out = token.line;
+  }
+}
+
+static void build_scope_desc(char *dest, size_t dest_size, const char *kind,
+                             const char *name) {
+  size_t prefix_len = 0;
+  size_t suffix_len = strlen(".locals");
+  size_t name_len = 0;
+
+  if (dest == NULL || dest_size == 0 || kind == NULL || name == NULL) {
+    return;
+  }
+
+  prefix_len = strlen(kind) + 1;
+  if (dest_size <= prefix_len + suffix_len) {
+    dest[0] = '\0';
+    return;
+  }
+
+  name_len = dest_size - prefix_len - suffix_len - 1;
+  snprintf(dest, dest_size, "%s:%.*s.locals", kind, (int)name_len, name);
+}
+
+static void fail_semantic(const char *expected, const char *found, int line) {
+  diag_error(expected, found, line);
+  exit(EXIT_FAILURE);
+}
+
+static bool simbolo_escalar(const Simbolo *sim) {
+  return sim != NULL &&
+         (sim->cat == CAT_VAR ||
+          (sim->cat == CAT_PARAM && sim->extra == 0));
+}
+
+static bool simbolo_vetor(const Simbolo *sim) {
+  return sim != NULL &&
+         (sim->cat == CAT_VETOR ||
+          (sim->cat == CAT_PARAM && sim->extra > 0));
+}
+
+static bool simbolo_subrotina(const Simbolo *sim) {
+  return sim != NULL &&
+         (sim->cat == CAT_PROC || sim->cat == CAT_FUNCAO);
+}
+
+static Simbolo *buscar_ou_falhar(const char *nome, int line,
+                                 const char *expected) {
+  Simbolo *sim = ts_buscar(nome);
+
+  if (sim == NULL) {
+    fail_semantic(expected, nome, line);
+  }
+
+  return sim;
+}
+
+static Simbolo *buscar_id_escalar_atual(const char *expected) {
+  char nome[LEX_LENGTH];
+  int linha = 0;
+  Simbolo *sim = NULL;
+
+  copy_ident_atual(nome, sizeof(nome), &linha);
+  sim = buscar_ou_falhar(nome, linha, expected);
+  if (!simbolo_escalar(sim)) {
+    fail_semantic(expected, nome, linha);
+  }
+
+  return sim;
+}
+
+static Simbolo *buscar_id_vetor_atual(const char *expected) {
+  char nome[LEX_LENGTH];
+  int linha = 0;
+  Simbolo *sim = NULL;
+
+  copy_ident_atual(nome, sizeof(nome), &linha);
+  sim = buscar_ou_falhar(nome, linha, expected);
+  if (!simbolo_vetor(sim)) {
+    fail_semantic(expected, nome, linha);
+  }
+
+  return sim;
+}
+
+static Simbolo *buscar_id_subrotina_atual(void) {
+  char nome[LEX_LENGTH];
+  int linha = 0;
+  Simbolo *sim = NULL;
+
+  copy_ident_atual(nome, sizeof(nome), &linha);
+  sim = buscar_ou_falhar(nome, linha, "sub-rotina declarada");
+  if (!simbolo_subrotina(sim)) {
+    fail_semantic("sub-rotina declarada", nome, linha);
+  }
+
+  return sim;
+}
+
 static void parse_id(void) { expect(sIDENTIF, "identificador"); }
 
 static void parse_decl_item(ItemDecl *item) {
@@ -128,7 +260,7 @@ static void parse_decl_item(ItemDecl *item) {
 }
 
 static void parse_decls(void) {
-  log_trace("parse_decls");
+  diag_info("parse_decls");
 
     ItemDecl itens[MAX_ID_POR_LINHA];
     int n = 0;
@@ -184,7 +316,7 @@ static Tipo parse_tpo_com_tam(int *tam_out) {
 static Tipo parse_tpo(void) { return parse_tpo_com_tam(NULL); }
 
 static void parse_glob(void) {
-  log_trace("parse_glob");
+  diag_info("parse_glob");
   expect(sGLOBALS, "globals");
   parse_decls();
   while (token.category == sIDENTIF) {
@@ -202,114 +334,122 @@ static void parse_locals_opt(void) {
 }
 
 static int parse_param(InfoParam buf[], int max) {
-    int n = 0;
+  int n = 0;
+  int tam = 0;
+  Tipo t = TIPO_NENHUM;
 
-    /* Primeiro parâmetro */
+  if (n < max) {
+    copy_ident_atual(buf[n].nome, sizeof(buf[n].nome), &buf[n].linha);
+  }
+  expect(sIDENTIF, "identificador");
+  expect(sDOIS_PTOS, ":");
+  t = parse_tpo_com_tam(&tam);
+  if (n < max) {
+    buf[n].tipo = t;
+    buf[n].extra = tam;
+  }
+  n++;
+
+  while (accept(sVIRGULA)) {
     if (n < max) {
-        strncpy(buf[n].nome, token.lexema, LEX_LENGTH - 1);
-        buf[n].nome[LEX_LENGTH - 1] = '\0';
+      copy_ident_atual(buf[n].nome, sizeof(buf[n].nome), &buf[n].linha);
     }
     expect(sIDENTIF, "identificador");
     expect(sDOIS_PTOS, ":");
-    Tipo t = parse_tpo();
-    if (n < max) buf[n].tipo = t;
-    n++;
-
-    /* Demais parâmetros */
-    while (accept(sVIRGULA)) {
-        if (n < max) {
-            strncpy(buf[n].nome, token.lexema, LEX_LENGTH - 1);
-            buf[n].nome[LEX_LENGTH - 1] = '\0';
-        }
-        expect(sIDENTIF, "identificador");
-        expect(sDOIS_PTOS, ":");
-        t = parse_tpo();
-        if (n < max) buf[n].tipo = t;
-        n++;
+    t = parse_tpo_com_tam(&tam);
+    if (n < max) {
+      buf[n].tipo = t;
+      buf[n].extra = tam;
     }
-    return n;
+    n++;
+  }
+
+  return n;
 }
 
 static void parse_func(void) {
-  log_trace("parse_func");
+  diag_info("parse_func");
   expect(sFN, "fn");
 
-    char nome[LEX_LENGTH];
-    int  nome_linha = token.line;
-    strncpy(nome, token.lexema, sizeof(nome) - 1);
-    nome[sizeof(nome) - 1] = '\0';
+  char nome[LEX_LENGTH];
+  char desc[256];
+  int nome_linha = token.line;
+  copy_text(nome, sizeof(nome), token.lexema);
   parse_id();
 
   expect(sABRE_PARENT, "(");
 
-    InfoParam params[MAX_PARAMS];
-    int n_params = 0;
+  InfoParam params[MAX_PARAMS];
+  int n_params = 0;
   if (token.category == sIDENTIF) {
-        n_params = parse_param(params, MAX_PARAMS);
+    n_params = parse_param(params, MAX_PARAMS);
   }
   expect(sFECHA_PARENT, ")");
   expect(sDOIS_PTOS, ":");
-    Tipo tipo_ret = parse_tpo();
+  Tipo tipo_ret = parse_tpo();
 
-    if (ts_inserir(nome, CAT_FUNCAO, tipo_ret, n_params) != 0) {
-        diag_error("funcao unica", nome, nome_linha);
-        exit(EXIT_FAILURE);
+  if (ts_inserir(nome, CAT_FUNCAO, tipo_ret, n_params) != 0) {
+    fail_semantic("funcao unica", nome, nome_linha);
+  }
+
+  build_scope_desc(desc, sizeof(desc), "fn", nome);
+  ts_entrar_escopo(desc);
+
+  for (int i = 0; i < n_params && i < MAX_PARAMS; i++) {
+    if (ts_inserir(params[i].nome, CAT_PARAM, params[i].tipo,
+                   params[i].extra) != 0) {
+      fail_semantic("parametro unico no escopo", params[i].nome,
+                    params[i].linha);
     }
-
-    char desc[256];
-    snprintf(desc, sizeof(desc), "fn:%s.locals", nome);
-    ts_entrar_escopo(desc);
-
-    for (int i = 0; i < n_params && i < MAX_PARAMS; i++) {
-        ts_inserir(params[i].nome, CAT_PARAM, params[i].tipo, 0);
-    }
+  }
 
   parse_locals_opt();
   parse_bco();
 
-    ts_sair_escopo();
+  ts_sair_escopo();
 }
 
 static void parse_proc(void) {
-  log_trace("parse_proc");
+  diag_info("parse_proc");
   expect(sPROC, "proc");
 
-    char nome[LEX_LENGTH];
-    int  nome_linha = token.line;
-    strncpy(nome, token.lexema, sizeof(nome) - 1);
-    nome[sizeof(nome) - 1] = '\0';
+  char nome[LEX_LENGTH];
+  char desc[256];
+  int nome_linha = token.line;
+  copy_text(nome, sizeof(nome), token.lexema);
   parse_id();
   expect(sABRE_PARENT, "(");
 
-    InfoParam params[MAX_PARAMS];
-    int n_params = 0;
+  InfoParam params[MAX_PARAMS];
+  int n_params = 0;
   if (token.category == sIDENTIF) {
-        n_params = parse_param(params, MAX_PARAMS);
+    n_params = parse_param(params, MAX_PARAMS);
   }
   expect(sFECHA_PARENT, ")");
 
-    if (ts_inserir(nome, CAT_PROC, TIPO_NENHUM, n_params) != 0) {
-        diag_error("procedimento unico", nome, nome_linha);
-        exit(EXIT_FAILURE);
-    }
+  if (ts_inserir(nome, CAT_PROC, TIPO_NENHUM, n_params) != 0) {
+    fail_semantic("procedimento unico", nome, nome_linha);
+  }
 
-    /* Entra no escopo local e insere parâmetros */
-    char desc[256];
-    snprintf(desc, sizeof(desc), "proc:%s.locals", nome);
-    ts_entrar_escopo(desc);
+  build_scope_desc(desc, sizeof(desc), "proc", nome);
+  ts_entrar_escopo(desc);
 
-    for (int i = 0; i < n_params && i < MAX_PARAMS; i++) {
-        ts_inserir(params[i].nome, CAT_PARAM, params[i].tipo, 0);
+  for (int i = 0; i < n_params && i < MAX_PARAMS; i++) {
+    if (ts_inserir(params[i].nome, CAT_PARAM, params[i].tipo,
+                   params[i].extra) != 0) {
+      fail_semantic("parametro unico no escopo", params[i].nome,
+                    params[i].linha);
     }
+  }
 
   parse_locals_opt();
   parse_bco();
 
-    ts_sair_escopo();
+  ts_sair_escopo();
 }
 
 static void parse_subs(void) {
-  log_trace("parse_subs");
+  diag_info("parse_subs");
   while (token.category == sFN ||
          (token.category == sPROC && next_token.category != sMAIN)) {
     if (token.category == sFN) {
@@ -321,22 +461,27 @@ static void parse_subs(void) {
 }
 
 static void parse_princ(void) {
-  log_trace("parse_princ");
+  diag_info("parse_princ");
+  int main_linha = 0;
+
   expect(sPROC, "proc");
+  main_linha = token.line;
   expect(sMAIN, "main");
   expect(sABRE_PARENT, "(");
   expect(sFECHA_PARENT, ")");
 
-    ts_inserir("main", CAT_PROC, TIPO_NENHUM, 0);
+  if (ts_inserir("main", CAT_PROC, TIPO_NENHUM, 0) != 0) {
+    fail_semantic("procedimento unico", "main", main_linha);
+  }
 
-    ts_entrar_escopo("proc:main.locals");
+  ts_entrar_escopo("proc:main.locals");
   parse_locals_opt();
   parse_bco();
-    ts_sair_escopo();
+  ts_sair_escopo();
 }
 
 static void parse_ini(void) {
-  log_trace("parse_ini");
+  diag_info("parse_ini");
   expect(sMODULE, "module");
   parse_id();
   expect(sPTO_VIRG, ";");
@@ -348,11 +493,11 @@ static void parse_ini(void) {
 }
 
 static void parse_bco(void) {
-  log_trace("parse_bco");
+  diag_info("parse_bco");
 
-    char desc[256];
-    ts_desc_bloco(desc, sizeof(desc));
-    ts_entrar_escopo(desc);
+  char desc[256];
+  ts_desc_bloco(desc, sizeof(desc));
+  ts_entrar_escopo(desc);
 
   expect(sSTART, "start");
   while (starts_cmd(token.category)) {
@@ -361,13 +506,15 @@ static void parse_bco(void) {
   }
   expect(sEND, "end");
 
-    ts_sair_escopo();
+  ts_sair_escopo();
 }
 
 static void parse_vec(void) {
+  buscar_id_vetor_atual("vetor declarado");
   parse_id();
   expect(sABRE_COLCH, "[");
   if (token.category == sIDENTIF) {
+    buscar_id_escalar_atual("identificador escalar declarado");
     parse_id();
   } else {
     expect(sCTEINT, "constante inteira ou identificador");
@@ -376,21 +523,35 @@ static void parse_vec(void) {
 }
 
 static void parse_call(void) {
+  char nome[LEX_LENGTH];
+  int linha = 0;
+  int n_args = 0;
+  Simbolo *sim = NULL;
+
+  copy_ident_atual(nome, sizeof(nome), &linha);
+  sim = buscar_id_subrotina_atual();
   parse_id();
   expect(sABRE_PARENT, "(");
   if (token.category != sFECHA_PARENT) {
     parse_expr();
+    n_args = 1;
     while (accept(sVIRGULA)) {
       parse_expr();
+      n_args++;
     }
   }
   expect(sFECHA_PARENT, ")");
+
+  if (sim->extra != n_args) {
+    fail_semantic("quantidade correta de parametros", nome, linha);
+  }
 }
 
 static void parse_atr(void) {
   if (token.category == sIDENTIF && next_token.category == sABRE_COLCH) {
     parse_vec();
   } else {
+    buscar_id_escalar_atual("variavel ou parametro escalar declarado");
     parse_id();
   }
   expect(sATRIB, ":=");
@@ -413,6 +574,7 @@ static void parse_inp(void) {
   if (token.category == sIDENTIF && next_token.category == sABRE_COLCH) {
     parse_vec();
   } else if (token.category == sIDENTIF) {
+    buscar_id_escalar_atual("variavel ou parametro escalar declarado");
     parse_id();
   } else {
     fail("identificador ou vetor");
@@ -496,6 +658,7 @@ static void parse_fr(void) {
   parse_expr();
   if (accept(sSTEP)) {
     if (token.category == sIDENTIF) {
+      buscar_id_escalar_atual("identificador escalar declarado");
       parse_id();
     } else {
       expect(sCTEINT, "constante inteira");
@@ -532,7 +695,7 @@ static void parse_ret(void) {
 }
 
 static void parse_cmd(void) {
-  log_trace("parse_cmd");
+  diag_info("parse_cmd");
   switch (token.category) {
   case sPRINT:
     parse_out();
@@ -583,22 +746,25 @@ static void parse_litl(void) {
 }
 
 static void parse_elem(void) {
-    if (token.category == sSTRING || token.category == sCTEINT ||
-        token.category == sCTECHAR || is_bool_literal_token()) {
-        parse_litl();
-        return;
+  if (token.category == sSTRING || token.category == sCTEINT ||
+      token.category == sCTECHAR || is_bool_literal_token()) {
+    parse_litl();
+    return;
+  }
+
+  if (token.category == sIDENTIF) {
+    if (next_token.category == sABRE_PARENT) {
+      parse_call();
+    } else if (next_token.category == sABRE_COLCH) {
+      parse_vec();
+    } else {
+      buscar_id_escalar_atual("identificador escalar declarado");
+      parse_id();
     }
-    if (token.category == sIDENTIF) {
-        if (next_token.category == sABRE_PARENT) {
-        parse_call();
-        } else if (next_token.category == sABRE_COLCH) {
-        parse_vec();
-        } else {
-        parse_id();
-        }
-        return;
-    }
-    fail("elemento");
+    return;
+  }
+
+  fail("elemento");
 }
 
 static void parse_fact(void) {
@@ -644,7 +810,7 @@ static void parse_exlog(void) {
 }
 
 static void parse_expr(void) {
-  log_trace("parse_expr");
+  diag_info("parse_expr");
   parse_exlog();
   while (accept(sOR)) {
     parse_exlog();
@@ -656,9 +822,7 @@ int parser_parse(FILE *source) {
     return -1;
   }
 
-  log_trace("inicio_analise_sintatica");
-
-    ts_iniciar();
+  diag_info("inicio_analise_sintatica");
 
   src = source;
   line_cnt = 1;
@@ -668,21 +832,7 @@ int parser_parse(FILE *source) {
   parse_ini();
   expect(sEOF, "fim de arquivo");
 
-  log_trace("fim_analise_sintatica");
+  diag_info("fim_analise_sintatica");
 
-    if (opts_get(OPT_SYMTAB)) {
-        const char *input = opts_input_file();
-        char ts_path[1024];
-        strncpy(ts_path, input ? input : "output", sizeof(ts_path) - 1);
-        ts_path[sizeof(ts_path) - 1] = '\0';
-        char *dot = strrchr(ts_path, '.');
-        if (dot) *dot = '\0';
-        strncat(ts_path, ".ts", sizeof(ts_path) - strlen(ts_path) - 1);
-        FILE *ts_fp = fopen(ts_path, "w");
-        if (ts_fp) { ts_dump(ts_fp); fclose(ts_fp); }
-        else fprintf(stderr, "Erro ao criar '%s'\n", ts_path);
-    }
-
-    ts_destruir();
   return 0;
 }
