@@ -1,3 +1,11 @@
+/*
+ * Projeto SALc - Fase 1
+ * Arquivo: log.c
+ * Integrantes:
+ * - Matheus Gabriel Viana Araujo - 10420444
+ * - Luis Fernando de Mesquita Pereira - 10410686
+ */
+
 #include "log.h"
 
 #include "symtab.h"
@@ -59,11 +67,13 @@ static const char *category_names[] = {
     [sFECHA_PARENT] = "sFECHA_PARENT",
     [sABRE_COLCH] = "sABRE_COLCH",
     [sFECHA_COLCH] = "sFECHA_COLCH",
+    [sERROR] = "sERROR",
     [sEOF] = "sEOF",
 };
 
 static FILE *g_trace_file = NULL;
 
+// Monta o nome do arquivo de saida trocando a extensao do fonte.
 static int build_output_path(char *buffer, size_t buffer_size,
                              const char *extension) {
   const char *input_file = opts_input_file();
@@ -95,14 +105,25 @@ static int write_token(FILE *output, const Token *token) {
     return -1;
   }
 
-  fprintf(output, "%d  %s  \"%s\"\n", token->line,
-          log_category_name(token->category), token->lexema);
+  // Escapa aspas e barra para o lexema sair legivel no .tk.
+  fprintf(output, "%d  %s  \"", token->line,
+          log_category_name(token->category));
+
+  for (const char *p = token->lexema; *p != '\0'; p++) {
+    if (*p == '\\' || *p == '"') {
+      fputc('\\', output);
+    }
+    fputc(*p, output);
+  }
+
+  fputs("\"\n", output);
   return 0;
 }
 
 static FILE *trace_file_open(void) {
   char path[1024];
 
+  // O arquivo de rastreamento so e aberto quando a opcao foi pedida.
   if (g_trace_file != NULL) {
     return g_trace_file;
   }
@@ -158,6 +179,10 @@ int log_tokens(FILE *source) {
 
   do {
     token = lex_next(source, &line_cnt);
+    if (token.category == sERROR) {
+      fclose(output);
+      return -1;
+    }
     write_token(output, &token);
   } while (token.category != sEOF);
 
@@ -217,7 +242,7 @@ int log_arg_error(ArgErr err) {
   case E_COUNT:
     fprintf(
         stderr,
-        "Uso: ./compilador <arquivo.sal> [--tokens] [--trace] [--symtab]\n");
+        "Uso: salc <arquivo.sal> [--tokens] [--trace] [--symtab]\n");
     fprintf(stderr, "Erro: faltam argumentos obrigatorios.\n");
     return 0;
   case E_PATH:

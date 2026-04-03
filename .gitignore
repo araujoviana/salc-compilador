@@ -1,4 +1,9 @@
+salc
 compilador
+dist/
+*.tk
+*.ts
+*.trc
 #
 # Prerequisites
 *.d

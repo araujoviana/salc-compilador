@@ -1,3 +1,11 @@
+/*
+ * Projeto SALc - Fase 1
+ * Arquivo: lex.h
+ * Integrantes:
+ * - Matheus Gabriel Viana Araujo - 10420444
+ * - Luis Fernando de Mesquita Pereira - 10410686
+ */
+
 #ifndef LEX_H
 #define LEX_H
 
@@ -59,7 +67,8 @@ typedef enum {
   sFECHA_PARENT,
   sABRE_COLCH,
   sFECHA_COLCH,
-  sEOF // Adicionado para idenficar final do arquivo
+  sERROR,
+  sEOF // Marca o fim do arquivo.
 } Category;
 
 typedef struct {

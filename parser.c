@@ -1,9 +1,18 @@
+/*
+ * Projeto SALc - Fase 1
+ * Arquivo: parser.c
+ * Integrantes:
+ * - Matheus Gabriel Viana Araujo - 10420444
+ * - Luis Fernando de Mesquita Pereira - 10410686
+ */
+
 #include "parser.h"
 #include "diag.h"
 #include "lex.h"
 #include "symtab.h"
 
 #include <stdbool.h>
+#include <setjmp.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -33,6 +42,9 @@ static Token token;
 static Token next_token;
 static FILE *src;
 static int line_cnt = 1;
+static jmp_buf parse_jmp;
+static bool em_funcao = false;
+static bool funcao_atual_tem_ret = false;
 
 static void parse_ini(void);
 static void parse_glob(void);
@@ -69,7 +81,7 @@ static void parse_wh(void);
 static void parse_rpt(void);
 static void parse_ret(void);
 static void parse_atr(void);
-static void parse_call(void);
+static void parse_call(bool exigir_funcao);
 static void parse_vec(void);
 static void parse_id(void);
 static void parse_elem(void);
@@ -85,14 +97,24 @@ static void copy_text(char *dest, size_t dest_size, const char *src);
 static void copy_ident_atual(char *dest, size_t dest_size, int *line_out);
 static void build_scope_desc(char *dest, size_t dest_size, const char *kind,
                              const char *name);
+static int parse_positive_int_literal(const char *expected);
+static int parse_vector_size_suffix(void);
 static void fail_semantic(const char *expected, const char *found, int line);
 static bool simbolo_compativel(const Simbolo *sim, IdUso uso);
 static Simbolo *buscar_id_declarado(IdUso uso, const char *expected);
 static Simbolo *parse_id_declarado(IdUso uso, const char *expected);
 
 static void advance(void) {
+  // O parser para no primeiro erro para nao espalhar retornos por todo lado.
   token = next_token;
+  if (token.category == sERROR) {
+    longjmp(parse_jmp, 1);
+  }
+
   next_token = lex_next(src, &line_cnt);
+  if (next_token.category == sERROR) {
+    longjmp(parse_jmp, 1);
+  }
 }
 
 static bool accept(Category c) {
@@ -105,7 +127,7 @@ static bool accept(Category c) {
 
 static void fail(const char *expected) {
   diag_error(expected, token.lexema, token.line);
-  exit(EXIT_FAILURE);
+  longjmp(parse_jmp, 1);
 }
 
 static void expect(Category c, const char *expected) {
@@ -119,7 +141,7 @@ static bool starts_cmd(Category c) {
          c == sLOOP || c == sRETURN || c == sSTART || c == sIDENTIF;
 }
 
-// Verifica se o token é um operador relacional
+// Evita repetir o mesmo teste em varias partes do parser.
 static bool is_relop(Category c) {
   return c == sMAIOR || c == sMAIORIG || c == sIGUAL || c == sMENOR ||
          c == sMENORIG || c == sDIFERENTE;
@@ -177,7 +199,40 @@ static void build_scope_desc(char *dest, size_t dest_size, const char *kind,
 
 static void fail_semantic(const char *expected, const char *found, int line) {
   diag_error(expected, found, line);
-  exit(EXIT_FAILURE);
+  longjmp(parse_jmp, 1);
+}
+
+static int parse_positive_int_literal(const char *expected) {
+  char lexema[LEX_LENGTH];
+  int linha = token.line;
+  int valor = 0;
+
+  copy_text(lexema, sizeof(lexema), token.lexema);
+  expect(sCTEINT, expected);
+
+  valor = atoi(lexema);
+  if (valor <= 0) {
+    fail_semantic("inteiro positivo", lexema, linha);
+  }
+
+  return valor;
+}
+
+static int parse_vector_size_suffix(void) {
+  int tamanho = 0;
+
+  if (!accept(sABRE_COLCH)) {
+    return 0;
+  }
+
+  tamanho = parse_positive_int_literal("constante inteira");
+  expect(sFECHA_COLCH, "]");
+
+  if (token.category == sABRE_COLCH) {
+    fail_semantic("apenas um nivel de vetor", token.lexema, token.line);
+  }
+
+  return tamanho;
 }
 
 static bool simbolo_compativel(const Simbolo *sim, IdUso uso) {
@@ -226,12 +281,7 @@ static void parse_decl_item(ItemDecl *item) {
   item->nome[LEX_LENGTH - 1] = '\0';
   item->linha = token.line;
   expect(sIDENTIF, "identificador");
-  item->tamanho = 0;
-  if (accept(sABRE_COLCH)) {
-    item->tamanho = atoi(token.lexema);
-    expect(sCTEINT, "constante inteira");
-    expect(sFECHA_COLCH, "]");
-  }
+  item->tamanho = parse_vector_size_suffix();
 }
 
 static void parse_decls(void) {
@@ -256,6 +306,11 @@ static void parse_decls(void) {
   expect(sPTO_VIRG, ";");
 
   for (int i = 0; i < n; i++) {
+    if (itens[i].tamanho > 0 && tam_tipo > 0) {
+      fail_semantic("tamanho de vetor declarado apenas uma vez", itens[i].nome,
+                    itens[i].linha);
+    }
+
     int tam = (itens[i].tamanho > 0) ? itens[i].tamanho : tam_tipo;
     Categoria cat = (tam > 0) ? CAT_VETOR : CAT_VAR;
     if (ts_inserir(itens[i].nome, cat, tipo, tam) != 0) {
@@ -287,13 +342,7 @@ static Tipo parse_tpo_com_tam(int *tam_out) {
     fail("tipo (int|bool|char)");
     t = TIPO_INT;
   }
-  int tam = 0;
-
-  while (accept(sABRE_COLCH)) {
-    tam = atoi(token.lexema);
-    expect(sCTEINT, "constante inteira");
-    expect(sFECHA_COLCH, "]");
-  }
+  int tam = parse_vector_size_suffix();
 
   if (tam_out)
     *tam_out = tam;
@@ -364,6 +413,8 @@ static void parse_subrotina(bool is_funcao) {
   int nome_linha = token.line;
   int n_params = 0;
   Tipo tipo = TIPO_NENHUM;
+  bool contexto_anterior = em_funcao;
+  bool retorno_anterior = funcao_atual_tem_ret;
 
   if (is_funcao) {
     diag_info("parse_func");
@@ -394,9 +445,18 @@ static void parse_subrotina(bool is_funcao) {
 
   build_scope_desc(desc, sizeof(desc), is_funcao ? "fn" : "proc", nome);
   ts_entrar_escopo(desc);
+  em_funcao = is_funcao;
+  funcao_atual_tem_ret = false;
   inserir_params(params, n_params);
   parse_locals_opt();
   parse_bco();
+
+  if (is_funcao && !funcao_atual_tem_ret) {
+    fail_semantic("funcao com comando ret", nome, nome_linha);
+  }
+
+  em_funcao = contexto_anterior;
+  funcao_atual_tem_ret = retorno_anterior;
   ts_sair_escopo();
 }
 
@@ -419,6 +479,8 @@ static void parse_subs(void) {
 static void parse_princ(void) {
   diag_info("parse_princ");
   int main_linha = 0;
+  bool contexto_anterior = em_funcao;
+  bool retorno_anterior = funcao_atual_tem_ret;
 
   expect(sPROC, "proc");
   main_linha = token.line;
@@ -431,8 +493,12 @@ static void parse_princ(void) {
   }
 
   ts_entrar_escopo("proc:main.locals");
+  em_funcao = false;
+  funcao_atual_tem_ret = false;
   parse_locals_opt();
   parse_bco();
+  em_funcao = contexto_anterior;
+  funcao_atual_tem_ret = retorno_anterior;
   ts_sair_escopo();
 }
 
@@ -452,6 +518,7 @@ static void parse_bco(void) {
   diag_info("parse_bco");
 
   char desc[256];
+  // Cada bloco start...end vira um escopo proprio.
   ts_desc_bloco(desc, sizeof(desc));
   ts_entrar_escopo(desc);
 
@@ -493,7 +560,7 @@ static void parse_vec(void) {
   expect(sFECHA_COLCH, "]");
 }
 
-static void parse_call(void) {
+static void parse_call(bool exigir_funcao) {
   char nome[LEX_LENGTH];
   int linha = 0;
   int n_args;
@@ -501,6 +568,11 @@ static void parse_call(void) {
 
   copy_ident_atual(nome, sizeof(nome), &linha);
   sim = parse_id_declarado(ID_SUBROTINA, "sub-rotina declarada");
+
+  if (exigir_funcao && sim->cat != CAT_FUNCAO) {
+    fail_semantic("funcao declarada", nome, linha);
+  }
+
   expect(sABRE_PARENT, "(");
   n_args = parse_expr_list();
   expect(sFECHA_PARENT, ")");
@@ -623,7 +695,7 @@ static void parse_fr(void) {
     if (token.category == sIDENTIF) {
       parse_id_declarado(ID_ESCALAR, "identificador escalar declarado");
     } else {
-      expect(sCTEINT, "constante inteira");
+      parse_wint();
     }
   }
   expect(sDO, "do");
@@ -652,7 +724,12 @@ static void parse_rpt(void) {
 }
 
 static void parse_ret(void) {
+  if (!em_funcao) {
+    fail_semantic("ret apenas dentro de funcao", token.lexema, token.line);
+  }
+
   expect(sRETURN, "ret");
+  funcao_atual_tem_ret = true;
   parse_expr();
 }
 
@@ -688,7 +765,7 @@ static void parse_cmd(void) {
     break;
   case sIDENTIF:
     if (next_token.category == sABRE_PARENT) {
-      parse_call();
+      parse_call(false);
     } else {
       parse_atr();
     }
@@ -717,7 +794,7 @@ static void parse_elem(void) {
 
   if (token.category == sIDENTIF) {
     if (next_token.category == sABRE_PARENT) {
-      parse_call();
+      parse_call(true);
     } else if (next_token.category == sABRE_COLCH) {
       parse_vec();
     } else {
@@ -784,12 +861,22 @@ int parser_parse(FILE *source) {
     return -1;
   }
 
+  if (setjmp(parse_jmp) != 0) {
+    return -1;
+  }
+
   diag_info("inicio_analise_sintatica");
 
   src = source;
   line_cnt = 1;
+  em_funcao = false;
+  funcao_atual_tem_ret = false;
   token = lex_next(src, &line_cnt);
   next_token = lex_next(src, &line_cnt);
+
+  if (token.category == sERROR || next_token.category == sERROR) {
+    return -1;
+  }
 
   parse_ini();
   expect(sEOF, "fim de arquivo");

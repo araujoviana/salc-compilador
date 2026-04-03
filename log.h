@@ -1,3 +1,11 @@
+/*
+ * Projeto SALc - Fase 1
+ * Arquivo: log.h
+ * Integrantes:
+ * - Matheus Gabriel Viana Araujo - 10420444
+ * - Luis Fernando de Mesquita Pereira - 10410686
+ */
+
 #ifndef LOG_H
 #define LOG_H
 

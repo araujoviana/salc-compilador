@@ -1,3 +1,11 @@
+/*
+ * Projeto SALc - Fase 1
+ * Arquivo: symtab.c
+ * Integrantes:
+ * - Matheus Gabriel Viana Araujo - 10420444
+ * - Luis Fernando de Mesquita Pereira - 10410686
+ */
+
 #include "symtab.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,6 +20,7 @@ static Escopo *atual = NULL;
 static LogEscopo *cabeca_log = NULL;
 static LogEscopo *cauda_log = NULL;
 
+// Cada escopo criado entra nessa lista para a saida final respeitar a ordem.
 static Escopo *escopo_novo(const char *desc) {
   Escopo *e = calloc(1, sizeof(Escopo));
   if (!e) {
@@ -80,6 +89,7 @@ void ts_desc_bloco(char *buf, size_t bufsz) {
     return;
   }
 
+  // O contador do bloco fica preso ao escopo local mais proximo.
   Escopo *raiz = atual;
   while (raiz && strstr(raiz->desc, ".locals") == NULL)
     raiz = raiz->pai;

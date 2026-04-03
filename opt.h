@@ -1,9 +1,17 @@
+/*
+ * Projeto SALc - Fase 1
+ * Arquivo: opt.h
+ * Integrantes:
+ * - Matheus Gabriel Viana Araujo - 10420444
+ * - Luis Fernando de Mesquita Pereira - 10410686
+ */
+
 #ifndef OPT_H
 #define OPT_H
 
 #include <stdbool.h>
 
-/// Flags das opções da linha de comando
+// Estrutura simples com as opcoes da linha de comando.
 typedef struct {
   const char *input_file;
   bool tokens;
@@ -11,10 +19,10 @@ typedef struct {
   bool trace;
 } CliOptions;
 
-// Criado pra faciliar a interface de opts_get
+// Enum usado para consultar uma opcao especifica.
 typedef enum { OPT_TOKENS, OPT_SYMTAB, OPT_TRACE } OptFlag;
 
-// Tipos de erro retornado pelo arquivo
+// Possiveis erros encontrados na leitura dos argumentos.
 typedef enum {
   E_OK = 0,
   E_COUNT,
