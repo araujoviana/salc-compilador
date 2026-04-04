@@ -43,52 +43,52 @@ static jmp_buf parse_jmp;
 static bool in_function = false;
 static bool current_function_has_return = false;
 
-static void parse_ini(void);
-static void parse_glob(void);
-static void parse_subs(void);
-static void parse_decls(void);
+static void parse_module(void);
+static void parse_globals(void);
+static void parse_subroutines(void);
+static void parse_declarations(void);
 static void parse_decl_item(DeclItem *item);
-static DataType parse_tpo(void);
-static DataType parse_tpo_com_tam(int *tam_out);
-static void parse_func(void);
-static void parse_proc(void);
+static DataType parse_type(void);
+static DataType parse_type_with_size(int *size_out);
+static void parse_function(void);
+static void parse_procedure(void);
 static void parse_subroutine(bool is_function);
-static void parse_princ(void);
+static void parse_main_procedure(void);
 static void parse_optional_locals(void);
 static int parse_param(ParamInfo buffer[], int max);
 static void parse_param_item(ParamInfo *param);
-static void parse_decl_sequence(void);
+static void parse_declaration_sequence(void);
 static void insert_params(const ParamInfo params[], int count);
 static int parse_expr_list(void);
-static void parse_bco(void);
-static void parse_cmd(void);
-static void parse_out(void);
-static void parse_inp(void);
+static void parse_block(void);
+static void parse_command(void);
+static void parse_output(void);
+static void parse_input(void);
 static void parse_if(void);
-static void parse_mat(void);
-static void parse_wlst(void);
-static void parse_whn(void);
-static void parse_othr(void);
-static void parse_wcnd(void);
-static void parse_witem(void);
-static void parse_wrnge(void);
-static void parse_wint(void);
-static void parse_fr(void);
-static void parse_wh(void);
-static void parse_rpt(void);
-static void parse_ret(void);
-static void parse_atr(void);
+static void parse_match(void);
+static void parse_when_list(void);
+static void parse_when_clause(void);
+static void parse_otherwise_clause(void);
+static void parse_when_condition(void);
+static void parse_when_item(void);
+static void parse_when_range(void);
+static void parse_when_int(void);
+static void parse_for(void);
+static void parse_while_loop(void);
+static void parse_repeat_until(void);
+static void parse_return(void);
+static void parse_assignment(void);
 static void parse_call(bool require_function);
-static void parse_vec(void);
+static void parse_array_access(void);
 static void parse_id(void);
-static void parse_elem(void);
+static void parse_element(void);
 static void parse_expr(void);
-static void parse_exlog(void);
-static void parse_exrel(void);
-static void parse_exari(void);
-static void parse_exarp(void);
-static void parse_fact(void);
-static void parse_litl(void);
+static void parse_logic_term(void);
+static void parse_relation_term(void);
+static void parse_add_term(void);
+static void parse_mul_term(void);
+static void parse_factor(void);
+static void parse_literal(void);
 
 static void copy_text(char *dest, size_t dest_size, const char *src);
 static void copy_current_ident(char *dest, size_t dest_size, int *line_out);
@@ -133,13 +133,13 @@ static void expect(Category c, const char *expected) {
   }
 }
 
-static bool starts_cmd(Category c) {
+static bool starts_command(Category c) {
   return c == sPRINT || c == sSCAN || c == sIF || c == sMATCH || c == sFOR ||
          c == sLOOP || c == sRETURN || c == sSTART || c == sIDENTIF;
 }
 
 // Evita repetir o mesmo teste em varias partes do parser
-static bool is_relop(Category c) {
+static bool is_rel_operator(Category c) {
   return c == sMAIOR || c == sMAIORIG || c == sIGUAL || c == sMENOR ||
          c == sMENORIG || c == sDIFERENTE;
 }
@@ -200,19 +200,19 @@ static void fail_semantic(const char *expected, const char *found, int line) {
 }
 
 static int parse_positive_int_literal(const char *expected) {
-  char lexema[LEX_LENGTH];
+  char lexeme[LEX_LENGTH];
   int line = token.line;
-  int valor = 0;
+  int value = 0;
 
-  copy_text(lexema, sizeof(lexema), token.lexema);
+  copy_text(lexeme, sizeof(lexeme), token.lexema);
   expect(sCTEINT, expected);
 
-  valor = atoi(lexema);
-  if (valor <= 0) {
-    fail_semantic("inteiro positivo", lexema, line);
+  value = atoi(lexeme);
+  if (value <= 0) {
+    fail_semantic("inteiro positivo", lexeme, line);
   }
 
-  return valor;
+  return value;
 }
 
 static int parse_vector_size_suffix(void) {
@@ -282,8 +282,8 @@ static void parse_decl_item(DeclItem *item) {
   item->size = parse_vector_size_suffix();
 }
 
-static void parse_decls(void) {
-  diag_info("parse_decls");
+static void parse_declarations(void) {
+  diag_info("parse_declarations");
 
   DeclItem items[MAX_ID_POR_LINHA];
   int n = 0;
@@ -300,7 +300,7 @@ static void parse_decls(void) {
   }
 
   expect(sDOIS_PTOS, ":");
-  type = parse_tpo_com_tam(&type_size);
+  type = parse_type_with_size(&type_size);
   expect(sPTO_VIRG, ";");
 
   for (int i = 0; i < n; i++) {
@@ -309,23 +309,23 @@ static void parse_decls(void) {
                     items[i].line);
     }
 
-    int tam = (items[i].size > 0) ? items[i].size : type_size;
-    SymbolCategory category = (tam > 0) ? SYM_ARRAY : SYM_VAR;
-    if (ts_insert(items[i].name, category, type, tam) != 0) {
+    int size = (items[i].size > 0) ? items[i].size : type_size;
+    SymbolCategory category = (size > 0) ? SYM_ARRAY : SYM_VAR;
+    if (ts_insert(items[i].name, category, type, size) != 0) {
       fail_semantic("identificador unico no escopo", items[i].name,
                     items[i].line);
     }
   }
 }
 
-static void parse_decl_sequence(void) {
-  parse_decls();
+static void parse_declaration_sequence(void) {
+  parse_declarations();
   while (token.category == sIDENTIF) {
-    parse_decls();
+    parse_declarations();
   }
 }
 
-static DataType parse_tpo_com_tam(int *tam_out) {
+static DataType parse_type_with_size(int *size_out) {
   DataType type;
   if (token.category == sINT) {
     type = TYPE_INT;
@@ -340,36 +340,36 @@ static DataType parse_tpo_com_tam(int *tam_out) {
     fail("tipo (int|bool|char)");
     type = TYPE_INT;
   }
-  int tam = parse_vector_size_suffix();
+  int size = parse_vector_size_suffix();
 
-  if (tam_out)
-    *tam_out = tam;
+  if (size_out)
+    *size_out = size;
 
   return type;
 }
 
-static DataType parse_tpo(void) { return parse_tpo_com_tam(NULL); }
+static DataType parse_type(void) { return parse_type_with_size(NULL); }
 
-static void parse_glob(void) {
-  diag_info("parse_glob");
+static void parse_globals(void) {
+  diag_info("parse_globals");
   expect(sGLOBALS, "globals");
-  parse_decl_sequence();
+  parse_declaration_sequence();
 }
 
 static void parse_optional_locals(void) {
   if (accept(sLOCALS)) {
-    parse_decl_sequence();
+    parse_declaration_sequence();
   }
 }
 
 static void parse_param_item(ParamInfo *param) {
-  int tam = 0;
+  int size = 0;
 
   copy_current_ident(param->name, sizeof(param->name), &param->line);
   expect(sIDENTIF, "identificador");
   expect(sDOIS_PTOS, ":");
-  param->type = parse_tpo_com_tam(&tam);
-  param->extra = tam;
+  param->type = parse_type_with_size(&size);
+  param->extra = size;
 }
 
 static int parse_param(ParamInfo buffer[], int max) {
@@ -409,16 +409,16 @@ static void parse_subroutine(bool is_function) {
   char scope_name[256];
   ParamInfo params[MAX_PARAMS];
   int name_line = token.line;
-  int n_params = 0;
+  int param_count = 0;
   DataType type = TYPE_NONE;
   bool prev_in_function = in_function;
   bool prev_has_return = current_function_has_return;
 
   if (is_function) {
-    diag_info("parse_func");
+    diag_info("parse_function");
     expect(sFN, "fn");
   } else {
-    diag_info("parse_proc");
+    diag_info("parse_procedure");
     expect(sPROC, "proc");
   }
 
@@ -426,16 +426,16 @@ static void parse_subroutine(bool is_function) {
   parse_id();
   expect(sABRE_PARENT, "(");
   if (token.category == sIDENTIF) {
-    n_params = parse_param(params, MAX_PARAMS);
+    param_count = parse_param(params, MAX_PARAMS);
   }
   expect(sFECHA_PARENT, ")");
 
   if (is_function) {
     expect(sDOIS_PTOS, ":");
-    type = parse_tpo();
+    type = parse_type();
   }
 
-  if (ts_insert(name, is_function ? SYM_FUNC : SYM_PROC, type, n_params) !=
+  if (ts_insert(name, is_function ? SYM_FUNC : SYM_PROC, type, param_count) !=
       0) {
     fail_semantic(is_function ? "funcao unica" : "procedimento unico", name,
                   name_line);
@@ -446,9 +446,9 @@ static void parse_subroutine(bool is_function) {
   ts_enter_scope(scope_name);
   in_function = is_function;
   current_function_has_return = false;
-  insert_params(params, n_params);
+  insert_params(params, param_count);
   parse_optional_locals();
-  parse_bco();
+  parse_block();
 
   if (is_function && !current_function_has_return) {
     fail_semantic("funcao com comando ret", name, name_line);
@@ -459,24 +459,24 @@ static void parse_subroutine(bool is_function) {
   ts_leave_scope();
 }
 
-static void parse_func(void) { parse_subroutine(true); }
+static void parse_function(void) { parse_subroutine(true); }
 
-static void parse_proc(void) { parse_subroutine(false); }
+static void parse_procedure(void) { parse_subroutine(false); }
 
-static void parse_subs(void) {
-  diag_info("parse_subs");
+static void parse_subroutines(void) {
+  diag_info("parse_subroutines");
   while (token.category == sFN ||
          (token.category == sPROC && next_token.category != sMAIN)) {
     if (token.category == sFN) {
-      parse_func();
+      parse_function();
     } else {
-      parse_proc();
+      parse_procedure();
     }
   }
 }
 
-static void parse_princ(void) {
-  diag_info("parse_princ");
+static void parse_main_procedure(void) {
+  diag_info("parse_main_procedure");
   int main_line = 0;
   bool prev_in_function = in_function;
   bool prev_has_return = current_function_has_return;
@@ -495,26 +495,26 @@ static void parse_princ(void) {
   in_function = false;
   current_function_has_return = false;
   parse_optional_locals();
-  parse_bco();
+  parse_block();
   in_function = prev_in_function;
   current_function_has_return = prev_has_return;
   ts_leave_scope();
 }
 
-static void parse_ini(void) {
-  diag_info("parse_ini");
+static void parse_module(void) {
+  diag_info("parse_module");
   expect(sMODULE, "module");
   parse_id();
   expect(sPTO_VIRG, ";");
   if (token.category == sGLOBALS) {
-    parse_glob();
+    parse_globals();
   }
-  parse_subs();
-  parse_princ();
+  parse_subroutines();
+  parse_main_procedure();
 }
 
-static void parse_bco(void) {
-  diag_info("parse_bco");
+static void parse_block(void) {
+  diag_info("parse_block");
 
   char desc[256];
   // Cada bloco start end vira um escopo proprio
@@ -522,8 +522,8 @@ static void parse_bco(void) {
   ts_enter_scope(desc);
 
   expect(sSTART, "start");
-  while (starts_cmd(token.category)) {
-    parse_cmd();
+  while (starts_command(token.category)) {
+    parse_command();
     expect(sPTO_VIRG, ";");
   }
   expect(sEND, "end");
@@ -548,7 +548,7 @@ static int parse_expr_list(void) {
   return count;
 }
 
-static void parse_vec(void) {
+static void parse_array_access(void) {
   parse_declared_id(ID_ARRAY, "vetor declarado");
   expect(sABRE_COLCH, "[");
   if (token.category == sIDENTIF) {
@@ -581,9 +581,9 @@ static void parse_call(bool require_function) {
   }
 }
 
-static void parse_atr(void) {
+static void parse_assignment(void) {
   if (token.category == sIDENTIF && next_token.category == sABRE_COLCH) {
-    parse_vec();
+    parse_array_access();
   } else {
     parse_declared_id(ID_SCALAR,
                       "variavel ou parametro escalar declarado");
@@ -592,7 +592,7 @@ static void parse_atr(void) {
   parse_expr();
 }
 
-static void parse_out(void) {
+static void parse_output(void) {
   expect(sPRINT, "print");
   expect(sABRE_PARENT, "(");
   parse_expr();
@@ -602,11 +602,11 @@ static void parse_out(void) {
   expect(sFECHA_PARENT, ")");
 }
 
-static void parse_inp(void) {
+static void parse_input(void) {
   expect(sSCAN, "scan");
   expect(sABRE_PARENT, "(");
   if (token.category == sIDENTIF && next_token.category == sABRE_COLCH) {
-    parse_vec();
+    parse_array_access();
   } else if (token.category == sIDENTIF) {
     parse_declared_id(ID_SCALAR,
                       "variavel ou parametro escalar declarado");
@@ -621,99 +621,99 @@ static void parse_if(void) {
   expect(sABRE_PARENT, "(");
   parse_expr();
   expect(sFECHA_PARENT, ")");
-  parse_cmd();
+  parse_command();
   if (accept(sELSE)) {
-    parse_cmd();
+    parse_command();
   }
 }
 
-static void parse_wint(void) {
+static void parse_when_int(void) {
   accept(sSUBRAT);
   expect(sCTEINT, "constante inteira");
 }
 
-static void parse_wrnge(void) {
+static void parse_when_range(void) {
   expect(sPTOPTO, "..");
-  parse_wint();
+  parse_when_int();
 }
 
-static void parse_witem(void) {
-  parse_wint();
+static void parse_when_item(void) {
+  parse_when_int();
   if (token.category == sPTOPTO) {
-    parse_wrnge();
+    parse_when_range();
   }
 }
 
-static void parse_wcnd(void) {
-  parse_witem();
+static void parse_when_condition(void) {
+  parse_when_item();
   while (accept(sVIRGULA)) {
-    parse_witem();
+    parse_when_item();
   }
 }
 
-static void parse_whn(void) {
+static void parse_when_clause(void) {
   expect(sWHEN, "when");
-  parse_wcnd();
+  parse_when_condition();
   expect(sIMPLIC, "=>");
-  parse_cmd();
+  parse_command();
   expect(sPTO_VIRG, ";");
 }
 
-static void parse_othr(void) {
+static void parse_otherwise_clause(void) {
   expect(sOTHERWISE, "otherwise");
   expect(sIMPLIC, "=>");
-  parse_cmd();
+  parse_command();
   expect(sPTO_VIRG, ";");
 }
 
-static void parse_wlst(void) {
-  parse_whn();
+static void parse_when_list(void) {
+  parse_when_clause();
   while (token.category == sWHEN) {
-    parse_whn();
+    parse_when_clause();
   }
   if (token.category == sOTHERWISE) {
-    parse_othr();
+    parse_otherwise_clause();
   }
 }
 
-static void parse_mat(void) {
+static void parse_match(void) {
   expect(sMATCH, "match");
   expect(sABRE_PARENT, "(");
   parse_expr();
   expect(sFECHA_PARENT, ")");
-  parse_wlst();
+  parse_when_list();
   expect(sEND, "end");
 }
 
-static void parse_fr(void) {
+static void parse_for(void) {
   expect(sFOR, "for");
-  parse_atr();
+  parse_assignment();
   expect(sTO, "to");
   parse_expr();
   if (accept(sSTEP)) {
     if (token.category == sIDENTIF) {
       parse_declared_id(ID_SCALAR, "identificador escalar declarado");
     } else {
-      parse_wint();
+      parse_when_int();
     }
   }
   expect(sDO, "do");
-  parse_cmd();
+  parse_command();
 }
 
-static void parse_wh(void) {
+static void parse_while_loop(void) {
   expect(sLOOP, "loop");
   expect(sWHILE, "while");
   expect(sABRE_PARENT, "(");
   parse_expr();
   expect(sFECHA_PARENT, ")");
-  parse_cmd();
+  parse_command();
 }
 
-static void parse_rpt(void) {
+static void parse_repeat_until(void) {
   expect(sLOOP, "loop");
-  while (starts_cmd(token.category)) {
-    parse_cmd();
+  while (starts_command(token.category)) {
+    parse_command();
     expect(sPTO_VIRG, ";");
   }
   expect(sUNTIL, "until");
@@ -722,7 +722,7 @@ static void parse_rpt(void) {
   expect(sFECHA_PARENT, ")");
 }
 
-static void parse_ret(void) {
+static void parse_return(void) {
   if (!in_function) {
     fail_semantic("ret apenas dentro de funcao", token.lexema, token.line);
   }
@@ -732,41 +732,41 @@ static void parse_ret(void) {
   parse_expr();
 }
 
-static void parse_cmd(void) {
-  diag_info("parse_cmd");
+static void parse_command(void) {
+  diag_info("parse_command");
   switch (token.category) {
   case sPRINT:
-    parse_out();
+    parse_output();
     break;
   case sSCAN:
-    parse_inp();
+    parse_input();
     break;
   case sIF:
     parse_if();
     break;
   case sMATCH:
-    parse_mat();
+    parse_match();
     break;
   case sFOR:
-    parse_fr();
+    parse_for();
     break;
   case sLOOP:
     if (next_token.category == sWHILE)
-      parse_wh();
+      parse_while_loop();
     else
-      parse_rpt();
+      parse_repeat_until();
     break;
   case sRETURN:
-    parse_ret();
+    parse_return();
     break;
   case sSTART:
-    parse_bco();
+    parse_block();
     break;
   case sIDENTIF:
     if (next_token.category == sABRE_PARENT) {
       parse_call(false);
     } else {
-      parse_atr();
+      parse_assignment();
     }
     break;
   default:
@@ -775,7 +775,7 @@ static void parse_cmd(void) {
   }
 }
 
-static void parse_litl(void) {
+static void parse_literal(void) {
   if (token.category == sSTRING || token.category == sCTEINT ||
       token.category == sCTECHAR || is_bool_literal_token()) {
     advance();
@@ -784,10 +784,10 @@ static void parse_litl(void) {
   }
 }
 
-static void parse_elem(void) {
+static void parse_element(void) {
   if (token.category == sSTRING || token.category == sCTEINT ||
       token.category == sCTECHAR || is_bool_literal_token()) {
-    parse_litl();
+    parse_literal();
     return;
   }
 
@@ -795,7 +795,7 @@ static void parse_elem(void) {
     if (next_token.category == sABRE_PARENT) {
       parse_call(true);
     } else if (next_token.category == sABRE_COLCH) {
-      parse_vec();
+      parse_array_access();
     } else {
       parse_declared_id(ID_SCALAR, "identificador escalar declarado");
     }
@@ -805,53 +805,53 @@ static void parse_elem(void) {
   fail("elemento");
 }
 
-static void parse_fact(void) {
+static void parse_factor(void) {
   if (accept(sNEG) || accept(sSUBRAT)) {
-    parse_fact();
+    parse_factor();
   } else if (accept(sABRE_PARENT)) {
     parse_expr();
     expect(sFECHA_PARENT, ")");
   } else {
-    parse_elem();
+    parse_element();
   }
 }
 
-static void parse_exarp(void) {
-  parse_fact();
+static void parse_mul_term(void) {
+  parse_factor();
   while (token.category == sMULT || token.category == sDIV) {
     advance();
-    parse_fact();
+    parse_factor();
   }
 }
 
-static void parse_exari(void) {
-  parse_exarp();
+static void parse_add_term(void) {
+  parse_mul_term();
   while (token.category == sSOMA || token.category == sSUBRAT) {
     advance();
-    parse_exarp();
+    parse_mul_term();
   }
 }
 
-static void parse_exrel(void) {
-  parse_exari();
-  while (is_relop(token.category)) {
+static void parse_relation_term(void) {
+  parse_add_term();
+  while (is_rel_operator(token.category)) {
     advance();
-    parse_exari();
+    parse_add_term();
   }
 }
 
-static void parse_exlog(void) {
-  parse_exrel();
+static void parse_logic_term(void) {
+  parse_relation_term();
   while (accept(sAND)) {
-    parse_exrel();
+    parse_relation_term();
   }
 }
 
 static void parse_expr(void) {
   diag_info("parse_expr");
-  parse_exlog();
+  parse_logic_term();
   while (accept(sOR)) {
-    parse_exlog();
+    parse_logic_term();
   }
 }
 
@@ -877,7 +877,7 @@ int parse_program(FILE *source) {
     return -1;
   }
 
-  parse_ini();
+  parse_module();
   expect(sEOF, "fim de arquivo");
 
   diag_info("fim_analise_sintatica");
