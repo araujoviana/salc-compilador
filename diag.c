@@ -1,9 +1,6 @@
 /*
- * Projeto SALc - Fase 1
- * Arquivo: diag.c
- * Integrantes:
- * - Matheus Gabriel Viana Araujo - 10420444
- * - Luis Fernando de Mesquita Pereira - 10410686
+ * Matheus Gabriel Viana Araujo - 10420444
+ * Luis Fernando de Mesquita Pereira - 10410686
  */
 
 #include "diag.h"
@@ -25,6 +22,4 @@ int diag_error(const char *token_expected, const char *token_found, int line) {
   return -1;
 }
 
-int diag_info(const char *msg) {
-  return log_trace(msg);
-}
+int diag_info(const char *msg) { return log_trace(msg); }

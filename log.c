@@ -1,9 +1,6 @@
 /*
- * Projeto SALc - Fase 1
- * Arquivo: log.c
- * Integrantes:
- * - Matheus Gabriel Viana Araujo - 10420444
- * - Luis Fernando de Mesquita Pereira - 10410686
+ * Matheus Gabriel Viana Araujo - 10420444
+ * Luis Fernando de Mesquita Pereira - 10410686
  */
 
 #include "log.h"
@@ -73,7 +70,7 @@ static const char *category_names[] = {
 
 static FILE *g_trace_file = NULL;
 
-// Monta o nome do arquivo de saida trocando a extensao do fonte.
+// Monta o nome do arquivo de saida trocando a extensao do fonte
 static int build_output_path(char *buffer, size_t buffer_size,
                              const char *extension) {
   const char *input_file = opts_input_file();
@@ -105,25 +102,15 @@ static int write_token(FILE *output, const Token *token) {
     return -1;
   }
 
-  // Escapa aspas e barra para o lexema sair legivel no .tk.
-  fprintf(output, "%d  %s  \"", token->line,
-          log_category_name(token->category));
-
-  for (const char *p = token->lexema; *p != '\0'; p++) {
-    if (*p == '\\' || *p == '"') {
-      fputc('\\', output);
-    }
-    fputc(*p, output);
-  }
-
-  fputs("\"\n", output);
+  fprintf(output, "%d  %s  \"%s\"\n", token->line,
+          log_category_name(token->category), token->lexema);
   return 0;
 }
 
 static FILE *trace_file_open(void) {
   char path[1024];
 
-  // O arquivo de rastreamento so e aberto quando a opcao foi pedida.
+  // O arquivo de rastreamento so e aberto quando a opcao foi pedida
   if (g_trace_file != NULL) {
     return g_trace_file;
   }

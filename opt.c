@@ -1,9 +1,6 @@
 /*
- * Projeto SALc - Fase 1
- * Arquivo: opt.c
- * Integrantes:
- * - Matheus Gabriel Viana Araujo - 10420444
- * - Luis Fernando de Mesquita Pereira - 10410686
+ * Matheus Gabriel Viana Araujo - 10420444
+ * Luis Fernando de Mesquita Pereira - 10410686
  */
 
 #include "opt.h"
@@ -11,35 +8,35 @@
 #include <string.h>
 
 static CliOptions
-    g_opts; // Guarda o arquivo de entrada e as opcoes da execucao.
+    g_opts; // Guarda o arquivo de entrada e as opcoes da execucao
 static bool g_opts_ready =
-    false; // Diz se a leitura da linha de comando ja foi feita.
+    false; // Diz se a leitura da linha de comando ja foi feita
 
-// Faz a leitura dos argumentos e valida o formato basico.
+// Faz a leitura dos argumentos e valida o formato basico
 ArgErr opts_parse(int argc, char *argv[]) {
   CliOptions tmp = {0};
   g_opts_ready = false;
 
-  // Clausulas de guarda.
+  // Clausulas de guarda
 
-  // O vetor de argumentos precisa existir.
+  // O vetor de argumentos precisa existir
   if (argv == NULL)
     return E_OUT_NULL;
 
-  // Precisa ter pelo menos o nome do programa e o arquivo .sal.
+  // Precisa ter pelo menos o nome do programa e o arquivo SAL
   if (argc < 2)
     return E_COUNT;
 
-  // O arquivo de entrada precisa terminar com .sal.
+  // O arquivo de entrada precisa terminar com extensao SAL
   const char *extension = strrchr(argv[1], '.');
   if (extension == NULL || strcmp(extension, ".sal") != 0) {
     return E_PATH;
   }
 
-  // Guarda o caminho do arquivo fonte.
+  // Guarda o caminho do arquivo fonte
   tmp.input_file = argv[1];
 
-  // Le as opcoes depois do nome do arquivo.
+  // Le as opcoes depois do nome do arquivo
   for (int i = 2; i < argc; i++) {
     if (strcmp(argv[i], "--tokens") == 0) {
       tmp.tokens = true;
@@ -57,9 +54,9 @@ ArgErr opts_parse(int argc, char *argv[]) {
   return E_OK;
 }
 
-// Consulta uma opcao ja lida no parsing.
+// Consulta uma opcao ja lida no parsing
 bool opts_get(OptFlag flag) {
-  // Se nao houve parsing ainda, nao ha o que consultar.
+  // Se nao houve parsing ainda, nao ha o que consultar
   if (!g_opts_ready)
     return false;
 

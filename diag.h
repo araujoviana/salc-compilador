@@ -1,9 +1,6 @@
 /*
- * Projeto SALc - Fase 1
- * Arquivo: diag.h
- * Integrantes:
- * - Matheus Gabriel Viana Araujo - 10420444
- * - Luis Fernando de Mesquita Pereira - 10410686
+ * Matheus Gabriel Viana Araujo - 10420444
+ * Luis Fernando de Mesquita Pereira - 10410686
  */
 
 #ifndef DIAG_H

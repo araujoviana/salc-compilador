@@ -1,9 +1,6 @@
 /*
- * Projeto SALc - Fase 1
- * Arquivo: symtab.h
- * Integrantes:
- * - Matheus Gabriel Viana Araujo - 10420444
- * - Luis Fernando de Mesquita Pereira - 10410686
+ * Matheus Gabriel Viana Araujo - 10420444
+ * Luis Fernando de Mesquita Pereira - 10410686
  */
 
 #ifndef SYMTAB_H
@@ -11,44 +8,50 @@
 
 #include "lex.h"
 
-typedef enum {
-  CAT_VAR,
-  CAT_VETOR,
-  CAT_PROC,
-  CAT_FUNCAO,
-  CAT_PARAM,
-} Categoria;
+#include <stddef.h>
+#include <stdio.h>
+
+#define TS_MAX_SCOPES 256
+#define TS_MAX_SYMBOLS 2048
 
 typedef enum {
-  TIPO_INT,
-  TIPO_BOOL,
-  TIPO_CHAR,
-  TIPO_NENHUM,
-} Tipo;
+  SYM_VAR,
+  SYM_ARRAY,
+  SYM_PROC,
+  SYM_FUNC,
+  SYM_PARAM,
+} SymbolCategory;
 
-typedef struct Simbolo {
-  char nome[LEX_LENGTH];
-  Categoria cat;
-  Tipo tipo;
+typedef enum {
+  TYPE_INT,
+  TYPE_BOOL,
+  TYPE_CHAR,
+  TYPE_NONE,
+} DataType;
+
+typedef struct {
+  char name[LEX_LENGTH];
+  SymbolCategory category;
+  DataType type;
   int extra;
-  struct Simbolo *prox;
-} Simbolo;
+  int scope_id;
+} Symbol;
 
-typedef struct Escopo {
+typedef struct {
   char desc[256];
-  Simbolo *simbolos;
-  struct Escopo *pai;
-  int cnt_blocos;
-} Escopo;
+  int parent_id;
+  int block_count;
+} Scope;
 
-void ts_iniciar(void);
-void ts_destruir(void);
-void ts_entrar_escopo(const char *desc);
-void ts_sair_escopo(void);
-const char *ts_escopo_atual(void);
-void ts_desc_bloco(char *buf, size_t bufsz);
-int ts_inserir(const char *nome, Categoria cat, Tipo tipo, int extra);
-Simbolo *ts_buscar(const char *nome);
+void ts_init(void);
+void ts_destroy(void);
+void ts_enter_scope(const char *desc);
+void ts_leave_scope(void);
+const char *ts_current_scope(void);
+void ts_build_block_scope(char *buffer, size_t buffer_size);
+int ts_insert(const char *name, SymbolCategory category, DataType type,
+              int extra);
+Symbol *ts_lookup(const char *name);
 void ts_dump(FILE *fp);
 
 #endif

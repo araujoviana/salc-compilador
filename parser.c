@@ -1,9 +1,6 @@
 /*
- * Projeto SALc - Fase 1
- * Arquivo: parser.c
- * Integrantes:
- * - Matheus Gabriel Viana Araujo - 10420444
- * - Luis Fernando de Mesquita Pereira - 10410686
+ * Matheus Gabriel Viana Araujo - 10420444
+ * Luis Fernando de Mesquita Pereira - 10410686
  */
 
 #include "parser.h"
@@ -11,8 +8,8 @@
 #include "lex.h"
 #include "symtab.h"
 
-#include <stdbool.h>
 #include <setjmp.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -20,48 +17,48 @@
 #define MAX_PARAMS 64
 
 typedef struct {
-  char nome[LEX_LENGTH];
-  int tamanho;
-  int linha;
-} ItemDecl;
+  char name[LEX_LENGTH];
+  int size;
+  int line;
+} DeclItem;
 
 typedef struct {
-  char nome[LEX_LENGTH];
-  Tipo tipo;
+  char name[LEX_LENGTH];
+  DataType type;
   int extra;
-  int linha;
-} InfoParam;
+  int line;
+} ParamInfo;
 
 typedef enum {
-  ID_ESCALAR,
-  ID_VETOR,
-  ID_SUBROTINA,
-} IdUso;
+  ID_SCALAR,
+  ID_ARRAY,
+  ID_SUBROUTINE,
+} IdUse;
 
 static Token token;
 static Token next_token;
 static FILE *src;
 static int line_cnt = 1;
 static jmp_buf parse_jmp;
-static bool em_funcao = false;
-static bool funcao_atual_tem_ret = false;
+static bool in_function = false;
+static bool current_function_has_return = false;
 
 static void parse_ini(void);
 static void parse_glob(void);
 static void parse_subs(void);
 static void parse_decls(void);
-static void parse_decl_item(ItemDecl *item);
-static Tipo parse_tpo(void);
-static Tipo parse_tpo_com_tam(int *tam_out);
+static void parse_decl_item(DeclItem *item);
+static DataType parse_tpo(void);
+static DataType parse_tpo_com_tam(int *tam_out);
 static void parse_func(void);
 static void parse_proc(void);
-static void parse_subrotina(bool is_funcao);
+static void parse_subroutine(bool is_function);
 static void parse_princ(void);
-static void parse_locals_opt(void);
-static int parse_param(InfoParam buf[], int max);
-static void parse_param_item(InfoParam *param);
-static void parse_decls_seq(void);
-static void inserir_params(const InfoParam params[], int count);
+static void parse_optional_locals(void);
+static int parse_param(ParamInfo buffer[], int max);
+static void parse_param_item(ParamInfo *param);
+static void parse_decl_sequence(void);
+static void insert_params(const ParamInfo params[], int count);
 static int parse_expr_list(void);
 static void parse_bco(void);
 static void parse_cmd(void);
@@ -81,7 +78,7 @@ static void parse_wh(void);
 static void parse_rpt(void);
 static void parse_ret(void);
 static void parse_atr(void);
-static void parse_call(bool exigir_funcao);
+static void parse_call(bool require_function);
 static void parse_vec(void);
 static void parse_id(void);
 static void parse_elem(void);
@@ -94,18 +91,18 @@ static void parse_fact(void);
 static void parse_litl(void);
 
 static void copy_text(char *dest, size_t dest_size, const char *src);
-static void copy_ident_atual(char *dest, size_t dest_size, int *line_out);
-static void build_scope_desc(char *dest, size_t dest_size, const char *kind,
+static void copy_current_ident(char *dest, size_t dest_size, int *line_out);
+static void build_scope_name(char *dest, size_t dest_size, const char *kind,
                              const char *name);
 static int parse_positive_int_literal(const char *expected);
 static int parse_vector_size_suffix(void);
 static void fail_semantic(const char *expected, const char *found, int line);
-static bool simbolo_compativel(const Simbolo *sim, IdUso uso);
-static Simbolo *buscar_id_declarado(IdUso uso, const char *expected);
-static Simbolo *parse_id_declarado(IdUso uso, const char *expected);
+static bool symbol_matches_use(const Symbol *symbol, IdUse use);
+static Symbol *lookup_declared_id(IdUse use, const char *expected);
+static Symbol *parse_declared_id(IdUse use, const char *expected);
 
 static void advance(void) {
-  // O parser para no primeiro erro para nao espalhar retornos por todo lado.
+  // O parser para no primeiro erro para nao espalhar retornos por todo lado
   token = next_token;
   if (token.category == sERROR) {
     longjmp(parse_jmp, 1);
@@ -141,7 +138,7 @@ static bool starts_cmd(Category c) {
          c == sLOOP || c == sRETURN || c == sSTART || c == sIDENTIF;
 }
 
-// Evita repetir o mesmo teste em varias partes do parser.
+// Evita repetir o mesmo teste em varias partes do parser
 static bool is_relop(Category c) {
   return c == sMAIOR || c == sMAIORIG || c == sIGUAL || c == sMENOR ||
          c == sMENORIG || c == sDIFERENTE;
@@ -170,14 +167,14 @@ static void copy_text(char *dest, size_t dest_size, const char *src) {
   dest[dest_size - 1] = '\0';
 }
 
-static void copy_ident_atual(char *dest, size_t dest_size, int *line_out) {
+static void copy_current_ident(char *dest, size_t dest_size, int *line_out) {
   copy_text(dest, dest_size, token.lexema);
   if (line_out != NULL) {
     *line_out = token.line;
   }
 }
 
-static void build_scope_desc(char *dest, size_t dest_size, const char *kind,
+static void build_scope_name(char *dest, size_t dest_size, const char *kind,
                              const char *name) {
   size_t prefix_len = 0;
   size_t suffix_len = strlen(".locals");
@@ -204,7 +201,7 @@ static void fail_semantic(const char *expected, const char *found, int line) {
 
 static int parse_positive_int_literal(const char *expected) {
   char lexema[LEX_LENGTH];
-  int linha = token.line;
+  int line = token.line;
   int valor = 0;
 
   copy_text(lexema, sizeof(lexema), token.lexema);
@@ -212,173 +209,174 @@ static int parse_positive_int_literal(const char *expected) {
 
   valor = atoi(lexema);
   if (valor <= 0) {
-    fail_semantic("inteiro positivo", lexema, linha);
+    fail_semantic("inteiro positivo", lexema, line);
   }
 
   return valor;
 }
 
 static int parse_vector_size_suffix(void) {
-  int tamanho = 0;
+  int size = 0;
 
   if (!accept(sABRE_COLCH)) {
     return 0;
   }
 
-  tamanho = parse_positive_int_literal("constante inteira");
+  size = parse_positive_int_literal("constante inteira");
   expect(sFECHA_COLCH, "]");
 
   if (token.category == sABRE_COLCH) {
     fail_semantic("apenas um nivel de vetor", token.lexema, token.line);
   }
 
-  return tamanho;
+  return size;
 }
 
-static bool simbolo_compativel(const Simbolo *sim, IdUso uso) {
+static bool symbol_matches_use(const Symbol *sim, IdUse use) {
   if (sim == NULL) {
     return false;
   }
 
-  switch (uso) {
-  case ID_ESCALAR:
-    return sim->cat == CAT_VAR || (sim->cat == CAT_PARAM && sim->extra == 0);
-  case ID_VETOR:
-    return sim->cat == CAT_VETOR ||
-           (sim->cat == CAT_PARAM && sim->extra > 0);
-  case ID_SUBROTINA:
-    return sim->cat == CAT_PROC || sim->cat == CAT_FUNCAO;
+  switch (use) {
+  case ID_SCALAR:
+    return sim->category == SYM_VAR ||
+           (sim->category == SYM_PARAM && sim->extra == 0);
+  case ID_ARRAY:
+    return sim->category == SYM_ARRAY ||
+           (sim->category == SYM_PARAM && sim->extra > 0);
+  case ID_SUBROUTINE:
+    return sim->category == SYM_PROC || sim->category == SYM_FUNC;
   default:
     return false;
   }
 }
 
-static Simbolo *buscar_id_declarado(IdUso uso, const char *expected) {
-  char nome[LEX_LENGTH];
-  int linha = 0;
-  Simbolo *sim;
+static Symbol *lookup_declared_id(IdUse use, const char *expected) {
+  char name[LEX_LENGTH];
+  int line = 0;
+  Symbol *sim;
 
-  copy_ident_atual(nome, sizeof(nome), &linha);
+  copy_current_ident(name, sizeof(name), &line);
 
-  sim = ts_buscar(nome);
-  if (!simbolo_compativel(sim, uso)) {
-    fail_semantic(expected, nome, linha);
+  sim = ts_lookup(name);
+  if (!symbol_matches_use(sim, use)) {
+    fail_semantic(expected, name, line);
   }
 
   return sim;
 }
 
-static Simbolo *parse_id_declarado(IdUso uso, const char *expected) {
-  Simbolo *sim = buscar_id_declarado(uso, expected);
+static Symbol *parse_declared_id(IdUse use, const char *expected) {
+  Symbol *sim = lookup_declared_id(use, expected);
   parse_id();
   return sim;
 }
 
 static void parse_id(void) { expect(sIDENTIF, "identificador"); }
 
-static void parse_decl_item(ItemDecl *item) {
-  strncpy(item->nome, token.lexema, LEX_LENGTH - 1);
-  item->nome[LEX_LENGTH - 1] = '\0';
-  item->linha = token.line;
+static void parse_decl_item(DeclItem *item) {
+  strncpy(item->name, token.lexema, LEX_LENGTH - 1);
+  item->name[LEX_LENGTH - 1] = '\0';
+  item->line = token.line;
   expect(sIDENTIF, "identificador");
-  item->tamanho = parse_vector_size_suffix();
+  item->size = parse_vector_size_suffix();
 }
 
 static void parse_decls(void) {
   diag_info("parse_decls");
 
-  ItemDecl itens[MAX_ID_POR_LINHA];
+  DeclItem items[MAX_ID_POR_LINHA];
   int n = 0;
-  int tam_tipo = 0;
-  Tipo tipo;
+  int type_size = 0;
+  DataType type;
 
-  parse_decl_item(&itens[n++]);
+  parse_decl_item(&items[n++]);
   while (accept(sVIRGULA)) {
     if (n >= MAX_ID_POR_LINHA) {
       fail_semantic("limite de identificadores por declaracao", token.lexema,
                     token.line);
     }
-    parse_decl_item(&itens[n++]);
+    parse_decl_item(&items[n++]);
   }
 
   expect(sDOIS_PTOS, ":");
-  tipo = parse_tpo_com_tam(&tam_tipo);
+  type = parse_tpo_com_tam(&type_size);
   expect(sPTO_VIRG, ";");
 
   for (int i = 0; i < n; i++) {
-    if (itens[i].tamanho > 0 && tam_tipo > 0) {
-      fail_semantic("tamanho de vetor declarado apenas uma vez", itens[i].nome,
-                    itens[i].linha);
+    if (items[i].size > 0 && type_size > 0) {
+      fail_semantic("tamanho de vetor declarado apenas uma vez", items[i].name,
+                    items[i].line);
     }
 
-    int tam = (itens[i].tamanho > 0) ? itens[i].tamanho : tam_tipo;
-    Categoria cat = (tam > 0) ? CAT_VETOR : CAT_VAR;
-    if (ts_inserir(itens[i].nome, cat, tipo, tam) != 0) {
-      fail_semantic("identificador unico no escopo", itens[i].nome,
-                    itens[i].linha);
+    int tam = (items[i].size > 0) ? items[i].size : type_size;
+    SymbolCategory category = (tam > 0) ? SYM_ARRAY : SYM_VAR;
+    if (ts_insert(items[i].name, category, type, tam) != 0) {
+      fail_semantic("identificador unico no escopo", items[i].name,
+                    items[i].line);
     }
   }
 }
 
-static void parse_decls_seq(void) {
+static void parse_decl_sequence(void) {
   parse_decls();
   while (token.category == sIDENTIF) {
     parse_decls();
   }
 }
 
-static Tipo parse_tpo_com_tam(int *tam_out) {
-  Tipo t;
+static DataType parse_tpo_com_tam(int *tam_out) {
+  DataType type;
   if (token.category == sINT) {
-    t = TIPO_INT;
+    type = TYPE_INT;
     advance();
   } else if (is_bool_type_token()) {
-    t = TIPO_BOOL;
+    type = TYPE_BOOL;
     advance();
   } else if (token.category == sCHAR) {
-    t = TIPO_CHAR;
+    type = TYPE_CHAR;
     advance();
   } else {
     fail("tipo (int|bool|char)");
-    t = TIPO_INT;
+    type = TYPE_INT;
   }
   int tam = parse_vector_size_suffix();
 
   if (tam_out)
     *tam_out = tam;
 
-  return t;
+  return type;
 }
 
-static Tipo parse_tpo(void) { return parse_tpo_com_tam(NULL); }
+static DataType parse_tpo(void) { return parse_tpo_com_tam(NULL); }
 
 static void parse_glob(void) {
   diag_info("parse_glob");
   expect(sGLOBALS, "globals");
-  parse_decls_seq();
+  parse_decl_sequence();
 }
 
-static void parse_locals_opt(void) {
+static void parse_optional_locals(void) {
   if (accept(sLOCALS)) {
-    parse_decls_seq();
+    parse_decl_sequence();
   }
 }
 
-static void parse_param_item(InfoParam *param) {
+static void parse_param_item(ParamInfo *param) {
   int tam = 0;
 
-  copy_ident_atual(param->nome, sizeof(param->nome), &param->linha);
+  copy_current_ident(param->name, sizeof(param->name), &param->line);
   expect(sIDENTIF, "identificador");
   expect(sDOIS_PTOS, ":");
-  param->tipo = parse_tpo_com_tam(&tam);
+  param->type = parse_tpo_com_tam(&tam);
   param->extra = tam;
 }
 
-static int parse_param(InfoParam buf[], int max) {
+static int parse_param(ParamInfo buffer[], int max) {
   int n = 0;
 
   if (n < max) {
-    parse_param_item(&buf[n]);
+    parse_param_item(&buffer[n]);
   } else {
     fail_semantic("limite de parametros", token.lexema, token.line);
   }
@@ -386,7 +384,7 @@ static int parse_param(InfoParam buf[], int max) {
 
   while (accept(sVIRGULA)) {
     if (n < max) {
-      parse_param_item(&buf[n]);
+      parse_param_item(&buffer[n]);
     } else {
       fail_semantic("limite de parametros", token.lexema, token.line);
     }
@@ -396,27 +394,27 @@ static int parse_param(InfoParam buf[], int max) {
   return n;
 }
 
-static void inserir_params(const InfoParam params[], int count) {
+static void insert_params(const ParamInfo params[], int count) {
   for (int i = 0; i < count; i++) {
-    if (ts_inserir(params[i].nome, CAT_PARAM, params[i].tipo,
+    if (ts_insert(params[i].name, SYM_PARAM, params[i].type,
                    params[i].extra) != 0) {
-      fail_semantic("parametro unico no escopo", params[i].nome,
-                    params[i].linha);
+      fail_semantic("parametro unico no escopo", params[i].name,
+                    params[i].line);
     }
   }
 }
 
-static void parse_subrotina(bool is_funcao) {
-  char nome[LEX_LENGTH];
-  char desc[256];
-  InfoParam params[MAX_PARAMS];
-  int nome_linha = token.line;
+static void parse_subroutine(bool is_function) {
+  char name[LEX_LENGTH];
+  char scope_name[256];
+  ParamInfo params[MAX_PARAMS];
+  int name_line = token.line;
   int n_params = 0;
-  Tipo tipo = TIPO_NENHUM;
-  bool contexto_anterior = em_funcao;
-  bool retorno_anterior = funcao_atual_tem_ret;
+  DataType type = TYPE_NONE;
+  bool prev_in_function = in_function;
+  bool prev_has_return = current_function_has_return;
 
-  if (is_funcao) {
+  if (is_function) {
     diag_info("parse_func");
     expect(sFN, "fn");
   } else {
@@ -424,7 +422,7 @@ static void parse_subrotina(bool is_funcao) {
     expect(sPROC, "proc");
   }
 
-  copy_text(nome, sizeof(nome), token.lexema);
+  copy_text(name, sizeof(name), token.lexema);
   parse_id();
   expect(sABRE_PARENT, "(");
   if (token.category == sIDENTIF) {
@@ -432,37 +430,38 @@ static void parse_subrotina(bool is_funcao) {
   }
   expect(sFECHA_PARENT, ")");
 
-  if (is_funcao) {
+  if (is_function) {
     expect(sDOIS_PTOS, ":");
-    tipo = parse_tpo();
+    type = parse_tpo();
   }
 
-  if (ts_inserir(nome, is_funcao ? CAT_FUNCAO : CAT_PROC, tipo, n_params) !=
+  if (ts_insert(name, is_function ? SYM_FUNC : SYM_PROC, type, n_params) !=
       0) {
-    fail_semantic(is_funcao ? "funcao unica" : "procedimento unico", nome,
-                  nome_linha);
+    fail_semantic(is_function ? "funcao unica" : "procedimento unico", name,
+                  name_line);
   }
 
-  build_scope_desc(desc, sizeof(desc), is_funcao ? "fn" : "proc", nome);
-  ts_entrar_escopo(desc);
-  em_funcao = is_funcao;
-  funcao_atual_tem_ret = false;
-  inserir_params(params, n_params);
-  parse_locals_opt();
+  build_scope_name(scope_name, sizeof(scope_name), is_function ? "fn" : "proc",
+                   name);
+  ts_enter_scope(scope_name);
+  in_function = is_function;
+  current_function_has_return = false;
+  insert_params(params, n_params);
+  parse_optional_locals();
   parse_bco();
 
-  if (is_funcao && !funcao_atual_tem_ret) {
-    fail_semantic("funcao com comando ret", nome, nome_linha);
+  if (is_function && !current_function_has_return) {
+    fail_semantic("funcao com comando ret", name, name_line);
   }
 
-  em_funcao = contexto_anterior;
-  funcao_atual_tem_ret = retorno_anterior;
-  ts_sair_escopo();
+  in_function = prev_in_function;
+  current_function_has_return = prev_has_return;
+  ts_leave_scope();
 }
 
-static void parse_func(void) { parse_subrotina(true); }
+static void parse_func(void) { parse_subroutine(true); }
 
-static void parse_proc(void) { parse_subrotina(false); }
+static void parse_proc(void) { parse_subroutine(false); }
 
 static void parse_subs(void) {
   diag_info("parse_subs");
@@ -478,28 +477,28 @@ static void parse_subs(void) {
 
 static void parse_princ(void) {
   diag_info("parse_princ");
-  int main_linha = 0;
-  bool contexto_anterior = em_funcao;
-  bool retorno_anterior = funcao_atual_tem_ret;
+  int main_line = 0;
+  bool prev_in_function = in_function;
+  bool prev_has_return = current_function_has_return;
 
   expect(sPROC, "proc");
-  main_linha = token.line;
+  main_line = token.line;
   expect(sMAIN, "main");
   expect(sABRE_PARENT, "(");
   expect(sFECHA_PARENT, ")");
 
-  if (ts_inserir("main", CAT_PROC, TIPO_NENHUM, 0) != 0) {
-    fail_semantic("procedimento unico", "main", main_linha);
+  if (ts_insert("main", SYM_PROC, TYPE_NONE, 0) != 0) {
+    fail_semantic("procedimento unico", "main", main_line);
   }
 
-  ts_entrar_escopo("proc:main.locals");
-  em_funcao = false;
-  funcao_atual_tem_ret = false;
-  parse_locals_opt();
+  ts_enter_scope("proc:main.locals");
+  in_function = false;
+  current_function_has_return = false;
+  parse_optional_locals();
   parse_bco();
-  em_funcao = contexto_anterior;
-  funcao_atual_tem_ret = retorno_anterior;
-  ts_sair_escopo();
+  in_function = prev_in_function;
+  current_function_has_return = prev_has_return;
+  ts_leave_scope();
 }
 
 static void parse_ini(void) {
@@ -518,9 +517,9 @@ static void parse_bco(void) {
   diag_info("parse_bco");
 
   char desc[256];
-  // Cada bloco start...end vira um escopo proprio.
-  ts_desc_bloco(desc, sizeof(desc));
-  ts_entrar_escopo(desc);
+  // Cada bloco start end vira um escopo proprio
+  ts_build_block_scope(desc, sizeof(desc));
+  ts_enter_scope(desc);
 
   expect(sSTART, "start");
   while (starts_cmd(token.category)) {
@@ -529,7 +528,7 @@ static void parse_bco(void) {
   }
   expect(sEND, "end");
 
-  ts_sair_escopo();
+  ts_leave_scope();
 }
 
 static int parse_expr_list(void) {
@@ -550,27 +549,27 @@ static int parse_expr_list(void) {
 }
 
 static void parse_vec(void) {
-  parse_id_declarado(ID_VETOR, "vetor declarado");
+  parse_declared_id(ID_ARRAY, "vetor declarado");
   expect(sABRE_COLCH, "[");
   if (token.category == sIDENTIF) {
-    parse_id_declarado(ID_ESCALAR, "identificador escalar declarado");
+    parse_declared_id(ID_SCALAR, "identificador escalar declarado");
   } else {
     expect(sCTEINT, "constante inteira ou identificador");
   }
   expect(sFECHA_COLCH, "]");
 }
 
-static void parse_call(bool exigir_funcao) {
-  char nome[LEX_LENGTH];
-  int linha = 0;
+static void parse_call(bool require_function) {
+  char name[LEX_LENGTH];
+  int line = 0;
   int n_args;
-  Simbolo *sim;
+  Symbol *sim;
 
-  copy_ident_atual(nome, sizeof(nome), &linha);
-  sim = parse_id_declarado(ID_SUBROTINA, "sub-rotina declarada");
+  copy_current_ident(name, sizeof(name), &line);
+  sim = parse_declared_id(ID_SUBROUTINE, "sub-rotina declarada");
 
-  if (exigir_funcao && sim->cat != CAT_FUNCAO) {
-    fail_semantic("funcao declarada", nome, linha);
+  if (require_function && sim->category != SYM_FUNC) {
+    fail_semantic("funcao declarada", name, line);
   }
 
   expect(sABRE_PARENT, "(");
@@ -578,7 +577,7 @@ static void parse_call(bool exigir_funcao) {
   expect(sFECHA_PARENT, ")");
 
   if (sim->extra != n_args) {
-    fail_semantic("quantidade correta de parametros", nome, linha);
+    fail_semantic("quantidade correta de parametros", name, line);
   }
 }
 
@@ -586,8 +585,8 @@ static void parse_atr(void) {
   if (token.category == sIDENTIF && next_token.category == sABRE_COLCH) {
     parse_vec();
   } else {
-    parse_id_declarado(ID_ESCALAR,
-                       "variavel ou parametro escalar declarado");
+    parse_declared_id(ID_SCALAR,
+                      "variavel ou parametro escalar declarado");
   }
   expect(sATRIB, ":=");
   parse_expr();
@@ -609,8 +608,8 @@ static void parse_inp(void) {
   if (token.category == sIDENTIF && next_token.category == sABRE_COLCH) {
     parse_vec();
   } else if (token.category == sIDENTIF) {
-    parse_id_declarado(ID_ESCALAR,
-                       "variavel ou parametro escalar declarado");
+    parse_declared_id(ID_SCALAR,
+                      "variavel ou parametro escalar declarado");
   } else {
     fail("identificador ou vetor");
   }
@@ -693,7 +692,7 @@ static void parse_fr(void) {
   parse_expr();
   if (accept(sSTEP)) {
     if (token.category == sIDENTIF) {
-      parse_id_declarado(ID_ESCALAR, "identificador escalar declarado");
+      parse_declared_id(ID_SCALAR, "identificador escalar declarado");
     } else {
       parse_wint();
     }
@@ -724,12 +723,12 @@ static void parse_rpt(void) {
 }
 
 static void parse_ret(void) {
-  if (!em_funcao) {
+  if (!in_function) {
     fail_semantic("ret apenas dentro de funcao", token.lexema, token.line);
   }
 
   expect(sRETURN, "ret");
-  funcao_atual_tem_ret = true;
+  current_function_has_return = true;
   parse_expr();
 }
 
@@ -798,7 +797,7 @@ static void parse_elem(void) {
     } else if (next_token.category == sABRE_COLCH) {
       parse_vec();
     } else {
-      parse_id_declarado(ID_ESCALAR, "identificador escalar declarado");
+      parse_declared_id(ID_SCALAR, "identificador escalar declarado");
     }
     return;
   }
@@ -856,7 +855,7 @@ static void parse_expr(void) {
   }
 }
 
-int parser_parse(FILE *source) {
+int parse_program(FILE *source) {
   if (source == NULL) {
     return -1;
   }
@@ -869,8 +868,8 @@ int parser_parse(FILE *source) {
 
   src = source;
   line_cnt = 1;
-  em_funcao = false;
-  funcao_atual_tem_ret = false;
+  in_function = false;
+  current_function_has_return = false;
   token = lex_next(src, &line_cnt);
   next_token = lex_next(src, &line_cnt);
 

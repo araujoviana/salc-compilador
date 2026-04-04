@@ -1,192 +1,187 @@
 /*
- * Projeto SALc - Fase 1
- * Arquivo: symtab.c
- * Integrantes:
- * - Matheus Gabriel Viana Araujo - 10420444
- * - Luis Fernando de Mesquita Pereira - 10410686
+ * Matheus Gabriel Viana Araujo - 10420444
+ * Luis Fernando de Mesquita Pereira - 10410686
  */
 
 #include "symtab.h"
+
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
-typedef struct LogEscopo {
-  Escopo *escopo;
-  struct LogEscopo *prox;
-} LogEscopo;
+// Vetores fixos deixam a tabela mais simples para esse projeto
+static Scope scopes[TS_MAX_SCOPES];
+static Symbol symbols[TS_MAX_SYMBOLS];
+static int scope_count = 0;
+static int symbol_count = 0;
+static int current_scope_id = -1;
 
-static Escopo *atual = NULL;
-static LogEscopo *cabeca_log = NULL;
-static LogEscopo *cauda_log = NULL;
-
-// Cada escopo criado entra nessa lista para a saida final respeitar a ordem.
-static Escopo *escopo_novo(const char *desc) {
-  Escopo *e = calloc(1, sizeof(Escopo));
-  if (!e) {
-    perror("symtab: calloc Escopo");
-    exit(EXIT_FAILURE);
-  }
-  strncpy(e->desc, desc, sizeof(e->desc) - 1);
-
-  LogEscopo *entrada = calloc(1, sizeof(LogEscopo));
-  if (!entrada) {
-    perror("symtab: calloc LogEscopo");
-    exit(EXIT_FAILURE);
-  }
-  entrada->escopo = e;
-  if (!cauda_log) {
-    cabeca_log = cauda_log = entrada;
-  } else {
-    cauda_log->prox = entrada;
-    cauda_log = entrada;
-  }
-
-  return e;
-}
-
-void ts_iniciar(void) {
-  atual = NULL;
-  cabeca_log = cauda_log = NULL;
-  ts_entrar_escopo("global");
-}
-
-void ts_destruir(void) {
-  LogEscopo *entrada = cabeca_log;
-  while (entrada) {
-    Simbolo *sim = entrada->escopo->simbolos;
-    while (sim) {
-      Simbolo *prox = sim->prox;
-      free(sim);
-      sim = prox;
-    }
-    free(entrada->escopo);
-    LogEscopo *prox_e = entrada->prox;
-    free(entrada);
-    entrada = prox_e;
-  }
-  atual = NULL;
-  cabeca_log = cauda_log = NULL;
-}
-
-void ts_entrar_escopo(const char *desc) {
-  Escopo *e = escopo_novo(desc);
-  e->pai = atual;
-  atual = e;
-}
-
-void ts_sair_escopo(void) {
-  if (!atual)
-    return;
-  atual = atual->pai;
-}
-
-const char *ts_escopo_atual(void) { return atual ? atual->desc : "(nenhum)"; }
-
-void ts_desc_bloco(char *buf, size_t bufsz) {
-  if (!atual) {
-    snprintf(buf, bufsz, "block#?");
-    return;
-  }
-
-  // O contador do bloco fica preso ao escopo local mais proximo.
-  Escopo *raiz = atual;
-  while (raiz && strstr(raiz->desc, ".locals") == NULL)
-    raiz = raiz->pai;
-
-  if (!raiz)
-    raiz = atual;
-
-  raiz->cnt_blocos++;
-
-  char base[256];
-  strncpy(base, raiz->desc, sizeof(base) - 1);
-  base[sizeof(base) - 1] = '\0';
-  char *ponto = strstr(base, ".locals");
-  if (ponto)
-    *ponto = '\0';
-
-  snprintf(buf, bufsz, "%s.block#%d", base, raiz->cnt_blocos);
-}
-
-int ts_inserir(const char *nome, Categoria cat, Tipo tipo, int extra) {
-  if (!atual)
-    return -1;
-
-  for (Simbolo *s = atual->simbolos; s; s = s->prox) {
-    if (strcmp(s->nome, nome) == 0)
-      return -1;
-  }
-
-  Simbolo *sim = calloc(1, sizeof(Simbolo));
-  if (!sim) {
-    perror("symtab: calloc Simbolo");
-    exit(EXIT_FAILURE);
-  }
-  strncpy(sim->nome, nome, sizeof(sim->nome) - 1);
-  sim->cat = cat;
-  sim->tipo = tipo;
-  sim->extra = extra;
-
-  if (!atual->simbolos) {
-    atual->simbolos = sim;
-  } else {
-    Simbolo *cauda = atual->simbolos;
-    while (cauda->prox)
-      cauda = cauda->prox;
-    cauda->prox = sim;
-  }
-  return 0;
-}
-
-Simbolo *ts_buscar(const char *nome) {
-  for (Escopo *esc = atual; esc; esc = esc->pai) {
-    for (Simbolo *s = esc->simbolos; s; s = s->prox) {
-      if (strcmp(s->nome, nome) == 0)
-        return s;
-    }
-  }
-  return NULL;
-}
-
-static const char *cat_para_str(Categoria c) {
-  switch (c) {
-  case CAT_VAR:
+static const char *category_to_string(SymbolCategory category) {
+  switch (category) {
+  case SYM_VAR:
     return "var";
-  case CAT_VETOR:
+  case SYM_ARRAY:
     return "vetor";
-  case CAT_PROC:
+  case SYM_PROC:
     return "proc";
-  case CAT_FUNCAO:
+  case SYM_FUNC:
     return "funcao";
-  case CAT_PARAM:
+  case SYM_PARAM:
     return "param";
   default:
     return "?";
   }
 }
 
-static const char *tipo_para_str(Tipo t) {
-  switch (t) {
-  case TIPO_INT:
+static const char *type_to_string(DataType type) {
+  switch (type) {
+  case TYPE_INT:
     return "int";
-  case TIPO_BOOL:
+  case TYPE_BOOL:
     return "bool";
-  case TIPO_CHAR:
+  case TYPE_CHAR:
     return "char";
-  case TIPO_NENHUM:
+  case TYPE_NONE:
     return "nenhum";
   default:
     return "?";
   }
 }
 
+void ts_init(void) {
+  scope_count = 0;
+  symbol_count = 0;
+  current_scope_id = -1;
+  ts_enter_scope("global");
+}
+
+void ts_destroy(void) {
+  scope_count = 0;
+  symbol_count = 0;
+  current_scope_id = -1;
+}
+
+void ts_enter_scope(const char *desc) {
+  Scope *scope;
+
+  if (scope_count >= TS_MAX_SCOPES) {
+    fprintf(stderr, "Erro: limite de escopos excedido\n");
+    return;
+  }
+
+  scope = &scopes[scope_count];
+  strncpy(scope->desc, desc, sizeof(scope->desc) - 1);
+  scope->desc[sizeof(scope->desc) - 1] = '\0';
+  scope->parent_id = current_scope_id;
+  scope->block_count = 0;
+
+  current_scope_id = scope_count;
+  scope_count++;
+}
+
+void ts_leave_scope(void) {
+  if (current_scope_id < 0) {
+    return;
+  }
+
+  current_scope_id = scopes[current_scope_id].parent_id;
+}
+
+const char *ts_current_scope(void) {
+  if (current_scope_id < 0) {
+    return "(none)";
+  }
+
+  return scopes[current_scope_id].desc;
+}
+
+void ts_build_block_scope(char *buffer, size_t buffer_size) {
+  int base_scope_id = current_scope_id;
+  char base_desc[256];
+  char *locals_part;
+
+  if (current_scope_id < 0) {
+    snprintf(buffer, buffer_size, "block#?");
+    return;
+  }
+
+  // O contador do bloco fica preso ao escopo local mais proximo
+  while (base_scope_id >= 0 &&
+         strstr(scopes[base_scope_id].desc, ".locals") == NULL) {
+    base_scope_id = scopes[base_scope_id].parent_id;
+  }
+
+  if (base_scope_id < 0) {
+    base_scope_id = current_scope_id;
+  }
+
+  scopes[base_scope_id].block_count++;
+
+  strncpy(base_desc, scopes[base_scope_id].desc, sizeof(base_desc) - 1);
+  base_desc[sizeof(base_desc) - 1] = '\0';
+
+  locals_part = strstr(base_desc, ".locals");
+  if (locals_part != NULL) {
+    *locals_part = '\0';
+  }
+
+  snprintf(buffer, buffer_size, "%s.block#%d", base_desc,
+           scopes[base_scope_id].block_count);
+}
+
+int ts_insert(const char *name, SymbolCategory category, DataType type,
+              int extra) {
+  Symbol *symbol;
+
+  if (current_scope_id < 0 || symbol_count >= TS_MAX_SYMBOLS) {
+    return -1;
+  }
+
+  for (int i = 0; i < symbol_count; i++) {
+    if (symbols[i].scope_id == current_scope_id &&
+        strcmp(symbols[i].name, name) == 0) {
+      return -1;
+    }
+  }
+
+  symbol = &symbols[symbol_count];
+  strncpy(symbol->name, name, sizeof(symbol->name) - 1);
+  symbol->name[sizeof(symbol->name) - 1] = '\0';
+  symbol->category = category;
+  symbol->type = type;
+  symbol->extra = extra;
+  symbol->scope_id = current_scope_id;
+
+  symbol_count++;
+  return 0;
+}
+
+Symbol *ts_lookup(const char *name) {
+  int scope_id = current_scope_id;
+
+  while (scope_id >= 0) {
+    for (int i = 0; i < symbol_count; i++) {
+      if (symbols[i].scope_id == scope_id && strcmp(symbols[i].name, name) == 0) {
+        return &symbols[i];
+      }
+    }
+
+    scope_id = scopes[scope_id].parent_id;
+  }
+
+  return NULL;
+}
+
 void ts_dump(FILE *fp) {
-  for (LogEscopo *entrada = cabeca_log; entrada; entrada = entrada->prox) {
-    Escopo *esc = entrada->escopo;
-    for (Simbolo *s = esc->simbolos; s; s = s->prox) {
-      fprintf(fp, "SCOPE=%s  id=\"%s\"  cat=%s  tipo=%s  extra=%d\n", esc->desc,
-              s->nome, cat_para_str(s->cat), tipo_para_str(s->tipo), s->extra);
+  for (int scope_id = 0; scope_id < scope_count; scope_id++) {
+    for (int i = 0; i < symbol_count; i++) {
+      if (symbols[i].scope_id != scope_id) {
+        continue;
+      }
+
+      fprintf(fp, "SCOPE=%s  id=\"%s\"  cat=%s  tipo=%s  extra=%d\n",
+              scopes[scope_id].desc, symbols[i].name,
+              category_to_string(symbols[i].category),
+              type_to_string(symbols[i].type), symbols[i].extra);
     }
   }
 }

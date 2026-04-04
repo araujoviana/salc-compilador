@@ -1,20 +1,17 @@
 /*
- * Projeto SALc - Fase 1
- * Arquivo: lex.c
- * Integrantes:
- * - Matheus Gabriel Viana Araujo - 10420444
- * - Luis Fernando de Mesquita Pereira - 10410686
+ * Matheus Gabriel Viana Araujo - 10420444
+ * Luis Fernando de Mesquita Pereira - 10410686
  */
 
 #include "lex.h"
-#include "diag.h" // Usa o modulo de diagnostico para avisar erros.
-#include <stdbool.h>
+#include "diag.h" // Usa o modulo de diagnostico para avisar erros
 #include <ctype.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
 #define APPEND_LEXEME(lex, len, c)                                             \
-  (lex[len++] = (char)c) // Coloca mais um caractere no lexema atual.
+  (lex[len++] = (char)c) // Coloca mais um caractere no lexema atual
 
 typedef struct {
   const char *text;
@@ -24,7 +21,7 @@ typedef struct {
 static const KeywordMap keyword_map[] = {
     {"bool", sBOOL},       {"char", sCHAR},
     {"do", sDO},           {"else", sELSE},
-    {"end", sEND},         {"false", sBOOL}, // Literal booleano.
+    {"end", sEND},         {"false", sBOOL}, // Literal booleano
     {"fn", sFN},           {"for", sFOR},
     {"globals", sGLOBALS}, {"if", sIF},
     {"int", sINT},         {"locals", sLOCALS},
@@ -33,9 +30,9 @@ static const KeywordMap keyword_map[] = {
     {"print", sPRINT},     {"proc", sPROC},
     {"ret", sRETURN},      {"scan", sSCAN},
     {"start", sSTART},     {"step", sSTEP},
-    {"to", sTO},           {"true", sBOOL}, // Literal booleano.
+    {"to", sTO},           {"true", sBOOL}, // Literal booleano
     {"until", sUNTIL},     {"when", sWHEN},
-    {"while", sWHILE},     {"main", sMAIN} // Nome reservado da principal.
+    {"while", sWHILE},     {"main", sMAIN} // Nome reservado da principal
 };
 
 #define TOTAL_KEYWORDS (sizeof(keyword_map) / sizeof(KeywordMap))
@@ -54,13 +51,13 @@ typedef enum {
   IDENT,
   STRING,
   CHAR_START,
-  CHAR_ESC, // Caractere com escape, como \n.
+  CHAR_ESC, // Caractere com escape, como \n
   CHAR_MID,
   NUMBER,
-  AMBIG_COMMENT, // Pode virar comentario de linha ou de bloco.
+  AMBIG_COMMENT, // Pode virar comentario de linha ou de bloco
   LINE_COMMENT,
   BLOCK_COMMENT,
-  BLOCK_COMMENT_ENDING, // Leu o } e espera fechar com @.
+  BLOCK_COMMENT_ENDING, // Leu o } e espera fechar com @
   COLON,
   DOT,
   EQUAL,
@@ -91,191 +88,191 @@ static bool is_char_escape(int c) {
 }
 
 Token lex_next(FILE *file_ptr, int *line_cnt) {
-  char lexeme[LEX_LENGTH]; // Lexema que esta sendo montado.
-  size_t l_len = 0;        // Tamanho atual do lexema.
+  char lexeme[LEX_LENGTH]; // Lexema que esta sendo montado
+  size_t l_len = 0;        // Tamanho atual do lexema
 
-  int c; // Caractere lido do arquivo.
+  int c; // Caractere lido do arquivo
 
-  State state = START; // Estado atual do automato.
+  State state = START; // Estado atual do automato
 
   while ((c = fgetc(file_ptr)) != EOF) {
     switch (state) {
-      // Inicio da leitura de um novo token.
+      // Inicio da leitura de um novo token
     case START:
-      // Ignora espacos e atualiza a linha.
+      // Ignora espacos e atualiza a linha
       if (isspace(c)) {
         if (c == '\n') {
           (*line_cnt)++;
         }
         continue;
       }
-      // Literal de texto.
+      // Literal de texto
       if (c == '\"') {
         APPEND_LEXEME(lexeme, l_len, c);
         state = STRING;
         break;
       }
-      // Caractere.
+      // Caractere
       else if (c == '\'') {
         APPEND_LEXEME(lexeme, l_len, c);
         state = CHAR_START;
         break;
       }
-      // Numero inteiro.
+      // Numero inteiro
       else if (isdigit(c)) {
         APPEND_LEXEME(lexeme, l_len, c);
         state = NUMBER;
         break;
       }
-      // Operador logico ou.
+      // Operador logico ou
       else if (c == 'v') {
         APPEND_LEXEME(lexeme, l_len, c);
         state = OR;
         break;
       }
-      // Operador logico e.
+      // Operador logico e
       else if (c == '^') {
         APPEND_LEXEME(lexeme, l_len, c);
         state = AND;
         break;
       }
-      // Identificador ou palavra reservada.
+      // Identificador ou palavra reservada
       else if (isalpha(c) || c == '_') {
         APPEND_LEXEME(lexeme, l_len, c);
         state = IDENT;
         break;
       }
-      // Comentario: pode ser de linha ou de bloco.
+      // Comentario que pode ser de linha ou de bloco
       else if (c == '@') {
         APPEND_LEXEME(lexeme, l_len, c);
         state = AMBIG_COMMENT;
         break;
       }
-      // Dois pontos.
+      // Dois pontos
       else if (c == ':') {
         APPEND_LEXEME(lexeme, l_len, c);
         state = COLON;
         break;
       }
-      // Ponto.
+      // Ponto
       else if (c == '.') {
         APPEND_LEXEME(lexeme, l_len, c);
         state = DOT;
         break;
       }
-      // Igual.
+      // Igual
       else if (c == '=') {
         APPEND_LEXEME(lexeme, l_len, c);
         state = EQUAL;
         break;
       }
-      // Maior que.
+      // Maior que
       else if (c == '>') {
         APPEND_LEXEME(lexeme, l_len, c);
         state = GREATER;
         break;
       }
-      // Menor que.
+      // Menor que
       else if (c == '<') {
         APPEND_LEXEME(lexeme, l_len, c);
         state = LOWER;
         break;
       }
 
-      // Os simbolos abaixo ja formam token sozinhos.
+      // Os simbolos abaixo ja formam token sozinhos
 
-      // Soma.
+      // Soma
       else if (c == '+') {
         APPEND_LEXEME(lexeme, l_len, c);
         lexeme[l_len] = '\0';
         return make_token(sSOMA, lexeme, *line_cnt, 0);
       }
-      // Subtracao.
+      // Subtracao
       else if (c == '-') {
         APPEND_LEXEME(lexeme, l_len, c);
         lexeme[l_len] = '\0';
         return make_token(sSUBRAT, lexeme, *line_cnt, 0);
       }
-      // Multiplicacao.
+      // Multiplicacao
       else if (c == '*') {
         APPEND_LEXEME(lexeme, l_len, c);
         lexeme[l_len] = '\0';
         return make_token(sMULT, lexeme, *line_cnt, 0);
       }
-      // Divisao.
+      // Divisao
       else if (c == '/') {
         APPEND_LEXEME(lexeme, l_len, c);
         lexeme[l_len] = '\0';
         return make_token(sDIV, lexeme, *line_cnt, 0);
       }
-      // Negacao.
+      // Negacao
       else if (c == '~') {
         APPEND_LEXEME(lexeme, l_len, c);
         lexeme[l_len] = '\0';
         return make_token(sNEG, lexeme, *line_cnt, 0);
       }
-      // Ponto e virgula.
+      // Ponto e virgula
       else if (c == ';') {
         APPEND_LEXEME(lexeme, l_len, c);
         lexeme[l_len] = '\0';
         return make_token(sPTO_VIRG, lexeme, *line_cnt, 0);
       }
 
-      // Virgula.
+      // Virgula
       else if (c == ',') {
         APPEND_LEXEME(lexeme, l_len, c);
         lexeme[l_len] = '\0';
         return make_token(sVIRGULA, lexeme, *line_cnt, 0);
       }
-      // Abre parenteses.
+      // Abre parenteses
       else if (c == '(') {
         APPEND_LEXEME(lexeme, l_len, c);
         lexeme[l_len] = '\0';
         return make_token(sABRE_PARENT, lexeme, *line_cnt, 0);
       }
-      // Fecha parenteses.
+      // Fecha parenteses
       else if (c == ')') {
         APPEND_LEXEME(lexeme, l_len, c);
         lexeme[l_len] = '\0';
         return make_token(sFECHA_PARENT, lexeme, *line_cnt, 0);
       }
-      // Abre colchetes.
+      // Abre colchetes
       else if (c == '[') {
         APPEND_LEXEME(lexeme, l_len, c);
         lexeme[l_len] = '\0';
         return make_token(sABRE_COLCH, lexeme, *line_cnt, 0);
       }
-      // Fecha colchetes.
+      // Fecha colchetes
       else if (c == ']') {
         APPEND_LEXEME(lexeme, l_len, c);
         lexeme[l_len] = '\0';
         return make_token(sFECHA_COLCH, lexeme, *line_cnt, 0);
       }
-      // Caractere que nao pertence a linguagem.
+      // Caractere que nao pertence a linguagem
       else {
         char found[2] = {(char)c, '\0'};
         return make_error_token("caractere valido", found, *line_cnt);
       }
     case STRING:
-      // Fechou o texto.
+      // Fechou o texto
       if (c == '\"') {
         APPEND_LEXEME(lexeme, l_len, c);
         lexeme[l_len] = '\0';
         return make_token(sSTRING, lexeme, *line_cnt, 0);
       } else if (c == '\n') {
-        return make_error_token("fechamento de string (\")",
-                                "quebra de linha", *line_cnt);
+        return make_error_token("fechamento de string (\")", "quebra de linha",
+                                *line_cnt);
       } else {
         APPEND_LEXEME(lexeme, l_len, c);
         break;
       }
     case CHAR_START:
-      // Caractere vazio nao vale em SAL.
+      // Caractere vazio nao vale em SAL
       if (c == '\'') {
         return make_error_token("caractere entre aspas simples", "''",
                                 *line_cnt);
       }
-      // Caractere com escape.
+      // Caractere com escape
       else if (c == '\\') {
         APPEND_LEXEME(lexeme, l_len, c);
         state = CHAR_ESC;
@@ -295,8 +292,7 @@ Token lex_next(FILE *file_ptr, int *line_cnt) {
         break;
       } else {
         char found[2] = {(char)c, '\0'};
-        return make_error_token("caractere de escape valido", found,
-                                *line_cnt);
+        return make_error_token("caractere de escape valido", found, *line_cnt);
       }
     case CHAR_MID:
       if (c == '\'') {
@@ -304,7 +300,7 @@ Token lex_next(FILE *file_ptr, int *line_cnt) {
         lexeme[l_len] = '\0';
         return make_token(sCTECHAR, lexeme, *line_cnt, 0);
       }
-      // Se vier outro simbolo, faltou fechar o caractere.
+      // Se vier outro simbolo, faltou fechar o caractere
       else {
         char found[2] = {(char)c, '\0'};
         return make_error_token("'", found, *line_cnt);
@@ -319,32 +315,33 @@ Token lex_next(FILE *file_ptr, int *line_cnt) {
         return make_token(sCTEINT, lexeme, *line_cnt, 0);
       }
     case IDENT:
-      // Depois da primeira letra, pode ter letra, numero ou sublinhado.
+      // Depois da primeira letra, pode ter letra, numero ou sublinhado
       if (isalpha(c) || c == '_' || isdigit(c)) {
         APPEND_LEXEME(lexeme, l_len, c);
         break;
       } else {
         ungetc(c, file_ptr);
         lexeme[l_len] = '\0';
-        Category ident_category = get_keyword(lexeme); // Identificador ou reservada.
+        Category ident_category =
+            get_keyword(lexeme); // Identificador ou reservada
         return make_token(ident_category, lexeme, *line_cnt, 0);
       }
     case AMBIG_COMMENT:
-      // Comentario de bloco.
+      // Comentario de bloco
       if (c == '{') {
         state = BLOCK_COMMENT;
       }
-      // Comentario de linha.
+      // Comentario de linha
       else {
         ungetc(c, file_ptr);
         state = LINE_COMMENT;
       }
       break;
     case LINE_COMMENT:
-      // O comentario de linha acaba quando chega o \n.
+      // O comentario de linha acaba quando chega o \n
       if (c == '\n') {
         (*line_cnt)++;
-        l_len = 0; // Limpa o lexema para o proximo token.
+        l_len = 0; // Limpa o lexema para o proximo token
         state = START;
       }
       break;
