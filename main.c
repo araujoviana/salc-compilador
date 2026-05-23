@@ -10,6 +10,9 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
+static int build_mepa_path(char *buf, size_t buf_size, const char *input_path);
 
 int main(int argc, char *argv[]) {
   // Primeiro confere os argumentos da linha de comando
@@ -47,10 +50,28 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  /* Deriva o caminho do arquivo .mepa a partir do arquivo fonte. */
+  char mepa_path[1024];
+  if (build_mepa_path(mepa_path, sizeof(mepa_path), input_file) != 0) {
+    fprintf(stderr, "Erro: caminho do arquivo .mepa excede o limite.\n");
+    fclose(source);
+    log_shutdown();
+    return EXIT_FAILURE;
+  }
+
+  FILE *mepa_out = fopen(mepa_path, "w");
+  if (mepa_out == NULL) {
+    log_file_open_error(mepa_path);
+    fclose(source);
+    log_shutdown();
+    return EXIT_FAILURE;
+  }
+
   // Depois entra na analise sintatica usando a tabela de simbolos
   ts_init();
 
-  if (parse_program(source) != 0) {
+  if (parse_program(source, mepa_out) != 0) {
+    fclose(mepa_out);
     ts_destroy();
     fclose(source);
     log_shutdown();
@@ -58,14 +79,34 @@ int main(int argc, char *argv[]) {
   }
 
   if (opts_get(OPT_SYMTAB) && log_symtab() != 0) {
+    fclose(mepa_out);
     ts_destroy();
     fclose(source);
     log_shutdown();
     return EXIT_FAILURE;
   }
 
+  fclose(mepa_out);
   ts_destroy();
   fclose(source);
   log_shutdown();
   return EXIT_SUCCESS;
+}
+
+/* Substitui a extensão do caminho de entrada por ".mepa". */
+static int build_mepa_path(char *buf, size_t buf_size, const char *input_path) {
+  strncpy(buf, input_path, buf_size - 1);
+  buf[buf_size - 1] = '\0';
+
+  char *dot = strrchr(buf, '.');
+  if (dot != NULL) {
+    *dot = '\0';
+  }
+
+  size_t len = strlen(buf);
+  if (len + 5 + 1 > buf_size) {
+    return -1;
+  }
+  strncat(buf, ".mepa", buf_size - len - 1);
+  return 0;
 }

@@ -855,7 +855,7 @@ static void parse_expr(void) {
   }
 }
 
-int parse_program(FILE *source) {
+int parse_program(FILE *source, FILE *mepa_out) {
   if (source == NULL) {
     return -1;
   }
@@ -864,12 +864,16 @@ int parse_program(FILE *source) {
     return -1;
   }
 
+  gen_init(mepa_out);
+
   diag_info("inicio_analise_sintatica");
 
   src = source;
   line_cnt = 1;
   in_function = false;
   current_function_has_return = false;
+  g_current_function_type = TYPE_NONE;
+  g_addr_counter = 0;
   token = lex_next(src, &line_cnt);
   next_token = lex_next(src, &line_cnt);
 

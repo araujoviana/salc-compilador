@@ -8,6 +8,6 @@
 
 #include <stdio.h>
 
-int parse_program(FILE *source);
+int parse_program(FILE *source, FILE *mepa_out);
 
 #endif
