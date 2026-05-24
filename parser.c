@@ -5,6 +5,7 @@
 
 #include "parser.h"
 #include "diag.h"
+#include "gerador.h"
 #include "lex.h"
 #include "symtab.h"
 
@@ -42,6 +43,8 @@ static int line_cnt = 1;
 static jmp_buf parse_jmp;
 static bool in_function = false;
 static bool current_function_has_return = false;
+static DataType g_current_function_type = TYPE_NONE;
+static int g_addr_counter = 0;
 
 static void parse_module(void);
 static void parse_globals(void);
